@@ -65,11 +65,19 @@ namespace Unity.Tiny.Web
 
         [DllImport(DLL, EntryPoint = "js_html_audioPlay")]
         [return: MarshalAs(UnmanagedType.I1)]
-        public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, bool loop);
+        public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pan, bool loop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioStop")]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool Stop(int audioSourceIdx, bool doStop);
+
+        [DllImport(DLL, EntryPoint = "js_html_audioSetVolume")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool SetVolume(int audioSourceIdx, double volume);
+
+        [DllImport(DLL, EntryPoint = "js_html_audioSetPan")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool SetPan(int audioSourceIdx, double pan);
 
         [DllImport(DLL, EntryPoint = "js_html_audioIsPlaying")]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -216,7 +224,7 @@ namespace Unity.Tiny.Web
                             }
 
                             int sourceID = ++IDPool.sourceID;
-                            AudioHTMLNativeCalls.Play(clip.clipID, sourceID, audioSource.volume, audioSource.loop);
+                            AudioHTMLNativeCalls.Play(clip.clipID, sourceID, audioSource.volume, audioSource.pan, audioSource.loop);
                             AudioHTMLSource audioNativeSource = new AudioHTMLSource()
                             {
                                 sourceID = sourceID
@@ -264,6 +272,31 @@ namespace Unity.Tiny.Web
             return false;
         }
 
+        protected override bool SetVolume(Entity e, float volume)
+        {
+            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            {
+                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioHTMLNativeCalls.SetVolume(audioNativeSource.sourceID, volume);
+                }
+            }
+            return false;
+        }
+
+        protected override bool SetPan(Entity e, float pan)
+        {
+            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            {
+                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioHTMLNativeCalls.SetPan(audioNativeSource.sourceID, pan);
+                }
+            }
+            return false;
+        }
 
     }
 }

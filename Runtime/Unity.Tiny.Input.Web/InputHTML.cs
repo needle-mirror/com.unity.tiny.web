@@ -10,6 +10,23 @@ namespace Unity.Tiny.Web
     public class HTMLInputSystem : InputSystem
     {
         private bool initialized = false;
+
+        public override void SetMouseMode(PointerModeType type)
+        {
+            switch (type)
+            {
+                case PointerModeType.Normal:
+                    InputHTMLNativeCalls.JSSetMouseMode(0);
+                    break;
+                case PointerModeType.Hidden:
+                    InputHTMLNativeCalls.JSSetMouseMode(1);
+                    break;
+                case PointerModeType.Locked:
+                    InputHTMLNativeCalls.JSSetMouseMode(2);
+                    break;
+            }
+        }
+
         protected override void OnStartRunning()
         {
             base.OnStartRunning();
@@ -30,6 +47,9 @@ namespace Unity.Tiny.Web
         private const int maxStreamLen = 1024;
         private int[] streamBuf = new int[maxStreamLen];
         private int firstTouch = -1;
+        private bool mouseInitDelta = true;
+        private int mouseLastX = 0;
+        private int mouseLastY = 0;
 
         protected override void OnUpdate()
         {
@@ -40,6 +60,7 @@ namespace Unity.Tiny.Web
                 InputHTMLNativeCalls.JSResetStreams();
                 InputHTMLNativeCalls.JSInitInput();
                 firstTouch = -1;
+                mouseInitDelta = true;
                 return;
             }
 
@@ -48,6 +69,7 @@ namespace Unity.Tiny.Web
                 m_inputState.Clear();
                 InputHTMLNativeCalls.JSResetStreams();
                 firstTouch = -1;
+                mouseInitDelta = true;
                 return;
             }
 
@@ -75,18 +97,25 @@ namespace Unity.Tiny.Web
             int mouseStreamLen;
             unsafe { fixed (int* ptr = streamBuf) { mouseStreamLen = InputHTMLNativeCalls.JSGetMouseStream(streamBuf.Length, ptr); }}
 
-            for (int i = 0; i < mouseStreamLen; i += 4)
+            m_inputState.mouseDeltaX = 0;
+            m_inputState.mouseDeltaY = 0;
+
+            for (int i = 0; i < mouseStreamLen; i += 6)
             {
                 int ev = streamBuf[i];
                 int button = streamBuf[i + 1];
                 int x = streamBuf[i + 2];
                 int y = streamBuf[i + 3];
+                int dx = streamBuf[i + 4];
+                int dy = streamBuf[i + 5];
                 if (ev == 0)
                     m_inputState.MouseUp(button);
                 else if (ev == 1)
                     m_inputState.MouseDown(button);
                 m_inputState.mouseX = x;
                 m_inputState.mouseY = y;
+                m_inputState.mouseDeltaX += dx;
+                m_inputState.mouseDeltaY -= dy;
             }
 
             if (mouseStreamLen != 0)
@@ -130,6 +159,7 @@ namespace Unity.Tiny.Web
                         {
                             m_inputState.MouseUp(0);
                             firstTouch = -1;
+                            mouseInitDelta = true;
                         }
                     }
                     else if (ev == 1)
@@ -145,6 +175,16 @@ namespace Unity.Tiny.Web
                     {
                         m_inputState.mouseX = x;
                         m_inputState.mouseY = y;
+
+                        if (!mouseInitDelta)
+                        {
+                            m_inputState.mouseDeltaX += x - mouseLastX;
+                            m_inputState.mouseDeltaY += y - mouseLastY;
+                        }
+                        
+                        mouseLastX = x;
+                        mouseLastY = y;
+                        mouseInitDelta = false;
                     }
                 }
             }
@@ -354,6 +394,8 @@ namespace Unity.Tiny.Web
                     return KeyCode.Return;
                 case DOM_VK_SPACE:
                     return KeyCode.Space;
+                case DOM_VK_ESCAPE:
+                    return KeyCode.Escape;
                 case DOM_VK_0:
                     return KeyCode.Alpha0;
                 case DOM_VK_1:
@@ -441,6 +483,9 @@ namespace Unity.Tiny.Web
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputResetStreams")]
         public static extern void JSResetStreams();
+
+        [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputSetMouseMode")]
+        public static extern void JSSetMouseMode(int mode);
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetKeyStream")]
         public static extern unsafe int JSGetKeyStream(int maxLen, int* dest);

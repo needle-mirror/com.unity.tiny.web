@@ -5,6 +5,14 @@ mergeInto(LibraryManager.library, {
         ut = ut || {};
         ut._HTML = ut._HTML || {};
 
+        ut._HTML.audio_setGain = function(sourceNode, volume) {
+            sourceNode.gainNode.gain.value = volume;
+        };
+        
+        ut._HTML.audio_setPan = function(sourceNode, pan) {
+            sourceNode.panNode.setPosition(pan, 0, 1 - Math.abs(pan));
+        };
+
         ut._HTML.unlock = function() {
         // call this method on touch start to create and play a buffer, then check
         // if the audio actually played to determine if audio has now been
@@ -58,6 +66,7 @@ mergeInto(LibraryManager.library, {
             new (window.AudioContext || window.webkitAudioContext)();
         if (!audioContext)
             return false;
+        audioContext.listener.setPosition(0, 0, 0);
 
         this.audioContext = audioContext;
         this.audioBuffers = {};
@@ -198,7 +207,7 @@ mergeInto(LibraryManager.library, {
     },
 
     // create audio source node
-    js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, loop) 
+    js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pan, loop) 
     {
         if (!this.audioContext || audioClipIdx < 0 || audioSourceIdx < 0)
             return false;
@@ -215,15 +224,20 @@ mergeInto(LibraryManager.library, {
         var sourceNode = this.audioContext.createBufferSource();
         sourceNode.buffer = srcBuffer;
 
-        // create gain node if needed
-        if (volume !== 1.0) {
-            var gainNode = this.audioContext.createGain();
-            gainNode.gain.setValueAtTime(volume, 0);
-            sourceNode.connect(gainNode);
-            gainNode.connect(this.audioContext.destination);
-        } else {
-            sourceNode.connect(this.audioContext.destination);
-        }
+        var panNode = this.audioContext.createPanner();
+        panNode.panningModel = 'equalpower';
+        sourceNode.panNode = panNode;
+
+        var gainNode = this.audioContext.createGain();
+        gainNode.buffer = srcBuffer;
+        sourceNode.gainNode = gainNode;
+
+        sourceNode.connect(gainNode);
+        sourceNode.gainNode.connect(panNode);
+        sourceNode.panNode.connect(this.audioContext.destination);
+
+        ut._HTML.audio_setGain(sourceNode, volume);
+        ut._HTML.audio_setPan(sourceNode, pan);
 
         // loop value
         sourceNode.loop = loop;
@@ -269,6 +283,32 @@ mergeInto(LibraryManager.library, {
             sourceNode.isPlaying = false;
             //console.log("[Audio] stopping " + audioSourceIdx);
         }
+    },
+
+    js_html_audioSetVolume : function (audioSourceIdx, volume) {
+        if (!this.audioContext || audioSourceIdx < 0)
+            return false;
+
+        // retrieve audio source node
+        var sourceNode = this.audioSources[audioSourceIdx];
+        if (!sourceNode)
+            return false;
+
+        ut._HTML.audio_setGain(sourceNode, volume);
+        return true;
+    },
+    
+    js_html_audioSetPan : function (audioSourceIdx, pan) {
+        if (!this.audioContext || audioSourceIdx < 0)
+            return false;
+
+        // retrieve audio source node
+        var sourceNode = this.audioSources[audioSourceIdx];
+        if (!sourceNode)
+            return false;
+
+        ut._HTML.audio_setPan(sourceNode, pan);
+        return true;
     },
 
     js_html_audioIsPlaying : function (audioSourceIdx) {
