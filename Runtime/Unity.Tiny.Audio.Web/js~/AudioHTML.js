@@ -17,15 +17,48 @@ mergeInto(LibraryManager.library, {
         // call this method on touch start to create and play a buffer, then check
         // if the audio actually played to determine if audio has now been
         // unlocked on iOS, Android, etc.
-            if (!self.audioContext)
+            if (!self.audioContext || self.unlocked)
                 return;
 
-            // fix Android can not play in suspend state
-            self.audioContext.resume();
+            function unlocked() {
+                // update the unlocked state and prevent this check from happening
+                // again
+                self.unlocked = true;
+                delete self.unlockBuffer;
+                //console.log("[Audio] unlocked");
 
-            // create an empty buffer
+                // remove the touch start listener
+                document.removeEventListener('click', ut._HTML.unlock, true);
+                document.removeEventListener('touchstart', ut._HTML.unlock, true);
+                document.removeEventListener('touchend', ut._HTML.unlock, true);
+                document.removeEventListener('keydown', ut._HTML.unlock, true);
+                document.removeEventListener('keyup', ut._HTML.unlock, true);
+            }
+
+            // If AudioContext is already enabled, no need to unlock again
+            if (self.audioContext.state === 'running') {
+                unlocked();
+                return;
+            }
+
+            // Limit unlock attempts to two times per second (arbitrary, to avoid a flood
+            // of hundreds of unlocks per second)
+            var now = performance.now();
+            if (self.lastUnlockAttempted && now - self.lastUnlockAttempted < 500)
+                return;
+            self.lastUnlockAttempted = now;
+
+            // fix Android can not play in suspend state
+            if (self.audioContext.resume) self.audioContext.resume();
+
+            // create an empty buffer for unlocking
+            if (!self.unlockBuffer) {
+                self.unlockBuffer = self.audioContext.createBuffer(1, 1, 22050);
+            }
+
+            // and a source for the empty buffer
             var source = self.audioContext.createBufferSource();
-            source.buffer = self.audioContext.createBuffer(1, 1, 22050);
+            source.buffer = self.unlockBuffer;
             source.connect(self.audioContext.destination);
 
             // play the empty buffer
@@ -37,24 +70,13 @@ mergeInto(LibraryManager.library, {
 
             // calling resume() on a stack initiated by user gesture is what
             // actually unlocks the audio on Android Chrome >= 55
-            self.audioContext.resume();
+            if (self.audioContext.resume) self.audioContext.resume();
 
             // setup a timeout to check that we are unlocked on the next event
             // loop
             source.onended = function () {
                 source.disconnect(0);
-
-                // update the unlocked state and prevent this check from happening
-                // again
-                self.unlocked = true;
-                //console.log("[Audio] unlocked");
-
-                // remove the touch start listener
-                document.removeEventListener('click', ut._HTML.unlock, true);
-                document.removeEventListener('touchstart', ut._HTML.unlock, true);
-                document.removeEventListener('touchend', ut._HTML.unlock, true);
-                document.removeEventListener('keydown', ut._HTML.unlock, true);
-                document.removeEventListener('keyup', ut._HTML.unlock, true);
+                unlocked();
             };
         };
 
@@ -112,18 +134,16 @@ mergeInto(LibraryManager.library, {
 
     // pause audio context
     js_html_audioPause : function () {
-        if (!this.audioContext)
-            return;
-
-        this.audioContext.suspend();
+        if (this.audioContext && this.audioContext.suspend) {
+            this.audioContext.suspend();
+        }
     },
 
     // resume audio context
     js_html_audioResume : function () {
-        if (!this.audioContext || typeof this.audioContext.resume !== 'function')
-            return;
-
-        this.audioContext.resume();
+        if (this.audioContext && this.audioContext.resume) {
+            this.audioContext.resume();
+        }
     },
 
     // load audio clip

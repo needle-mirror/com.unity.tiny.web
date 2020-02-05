@@ -91,38 +91,51 @@ namespace Unity.Tiny.Web
         private void UpdateDisplayInfo(bool firstTime)
         {
             var env = World.TinyEnvironment();
-            var config = env.GetConfigData<DisplayInfo>();
+            var di = env.GetConfigData<DisplayInfo>();
+
+            // TODO DOTSR-994 -- screenDpiScale is being used as both user configuration and information here
+            if (di.screenDpiScale == 0.0f)
+                di.screenDpiScale = HTMLNativeCalls.getDPIScale();
+
+            HTMLNativeCalls.getScreenSize(ref di.screenWidth, ref di.screenHeight);
+            HTMLNativeCalls.getFrameSize(ref di.frameWidth, ref di.frameHeight);
 
             int wCanvas = 0, hCanvas = 0;
             if (firstTime)
             {
-                HTMLNativeCalls.getScreenSize(ref config.screenWidth, ref config.screenHeight);
-                wCanvas = config.width;
-                hCanvas = config.height;
+                // TODO DOTSR-994 -- this is a case where we're using width/height as read/write instead of as explicit read or write only
+                wCanvas = di.width;
+                hCanvas = di.height;
             } else {
                 HTMLNativeCalls.getCanvasSize(ref wCanvas, ref hCanvas);
             }
 
-            HTMLNativeCalls.getFrameSize(ref config.frameWidth, ref config.frameHeight);
-            if (config.autoSizeToFrame)
+            if (di.autoSizeToFrame)
             {
-                config.width = config.frameWidth;
-                config.height = config.frameHeight;
+                di.width = di.frameWidth;
+                di.height = di.frameHeight;
             }
 
-            if (firstTime || wCanvas != config.width || hCanvas != config.height)
+            // TODO DOTSR-994 -- the framebufferWidth/Height should be directly configurable
+            di.framebufferWidth = (int) (di.width * di.screenDpiScale);
+            di.framebufferHeight = (int) (di.height * di.screenDpiScale);
+
+            unsafe
             {
+                if (firstTime || UnsafeUtility.MemCmp(UnsafeUtility.AddressOf(ref di), UnsafeUtility.AddressOf(ref lastDisplayInfo), sizeof(DisplayInfo)) != 0)
+                {
+                    // Only do this if it's the first time, or if the struct values actually changed from the last time we set it
 #if DEBUG
-                Debug.Log($"setCanvasSize {config.width} {config.height}");
+                    Debug.Log($"setCanvasSize {di.width}px {di.height}px (backing {di.framebufferWidth} {di.framebufferHeight}, dpi scale {di.screenDpiScale})");
 #endif
-                HTMLNativeCalls.setCanvasSizeAndMode(config.width, config.height, 2);
-                config.framebufferWidth = config.width;
-                config.framebufferHeight = config.height;
+                    HTMLNativeCalls.setCanvasSize(di.width, di.height, di.framebufferWidth, di.framebufferHeight);
+                    env.SetConfigData(di);
+                    lastDisplayInfo = di;
+                }
             }
-
-            env.SetConfigData(config);
         }
 
+        protected DisplayInfo lastDisplayInfo;
         protected bool initialized;
         protected double frameTime;
     }
@@ -142,7 +155,7 @@ namespace Unity.Tiny.Web
 
         // calls to HTMLWrapper.js directly
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_setCanvasSize")]
-        public static extern int setCanvasSizeAndMode(int width, int height, int webgl);
+        public static extern int setCanvasSize(int cssWidth, int cssHeight, int fbWidth, int fbHeight);
 
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_debugReadback")]
         public static unsafe extern void debugReadback(int w, int h, void *pixels);
@@ -155,6 +168,9 @@ namespace Unity.Tiny.Web
 
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_getScreenSize")]
         public static extern void getScreenSize(ref int w, ref int h);
+
+        [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_getDPIScale")]
+        public static extern float getDPIScale();
     }
 
 }

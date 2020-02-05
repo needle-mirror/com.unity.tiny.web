@@ -47,21 +47,21 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_setCanvasSize__proxy : 'sync',
-  js_html_setCanvasSize : function(width, height) {
+  js_html_setCanvasSize : function(width, height, fbwidth, fbheight) {
     if (!width>0 || !height>0)
         throw "Bad canvas size at init.";
     var canvas = ut._HTML.canvasElement;
     if (!canvas) {
       // take possible user element
       canvas = document.getElementById("UT_CANVAS");
-      if (canvas)
-        console.log('Using user UT_CANVAS element.');
-    } 
+    }
     if (!canvas) {
+      // Note -- if you change this here, make sure you also update
+      // tiny_shell.html, which is where the default actually lives
       canvas = document.createElement("canvas");
       canvas.setAttribute("id", "UT_CANVAS");
-      canvas.setAttribute("style", "touch-action: none;");
       canvas.setAttribute("tabindex", "1");
+      canvas.style.touchAction = "none";
       if (document.body) {
         document.body.style.margin = "0px";
         document.body.style.border = "0";
@@ -75,16 +75,25 @@ mergeInto(LibraryManager.library, {
 
     ut._HTML.canvasElement = canvas;
 
-    canvas.width = width;
-    canvas.height = height;
+    canvas.style.width = width + "px";
+    canvas.style.height = height + "px";
+    canvas.width = fbwidth || width;
+    canvas.height = fbheight || height;
 
     ut._HTML.canvasMode = 'bgfx';
 
-    canvas.addEventListener("webglcontextlost", function(event) { event.preventDefault(); }, false);
-    window.addEventListener("focus", function(event) { ut._HTML.focus = true; } );
-    window.addEventListener("blur", function(event) { ut._HTML.focus = false; } );
+    if (!canvas.tiny_initialized) {
+      canvas.addEventListener("webglcontextlost", function(event) { event.preventDefault(); }, false);
+      canvas.focus();
+      canvas.tiny_initialized = true;
+    }
 
-    canvas.focus();
+    if (!window.tiny_initialized) {
+      window.addEventListener("focus", function (event) { ut._HTML.focus = true; });
+      window.addEventListener("blur", function (event) { ut._HTML.focus = false; });
+      window.tiny_initialized = true;
+    }
+
     return true;
   },
 
