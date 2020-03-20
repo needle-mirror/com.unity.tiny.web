@@ -50,6 +50,8 @@ namespace Unity.Tiny.Web
         private bool mouseInitDelta = true;
         private int mouseLastX = 0;
         private int mouseLastY = 0;
+        private const int maxTranslatedKeys = 8;
+        private KeyCode[] translatedKeys = new KeyCode[maxTranslatedKeys];
 
         protected override void OnUpdate()
         {
@@ -84,13 +86,16 @@ namespace Unity.Tiny.Web
             {
                 int action = streamBuf[i];
                 int key = streamBuf[i + 1];
-                KeyCode translatedKey = TranslateKey(key);
-                if (translatedKey == KeyCode.None)
-                    continue;
-                if (action == 0)
-                    m_inputState.KeyUp(translatedKey);
-                else if (action == 1)
-                    m_inputState.KeyDown(translatedKey);
+                int nkeys = TranslateKey(key, translatedKeys);
+                for ( int j=0; j<nkeys; j++ ) { 
+                    KeyCode translatedKey = translatedKeys[j];
+                    if (translatedKey == KeyCode.None)
+                        continue;
+                    if (action == 0)
+                        m_inputState.KeyUp(translatedKey);
+                    else if (action == 1)
+                        m_inputState.KeyDown(translatedKey);
+                }
             }
 
             // mouse (move + up/down)
@@ -378,99 +383,138 @@ namespace Unity.Tiny.Web
         private const int DOM_VK_PA1 = 0xFD;
         private const int DOM_VK_WIN_OEM_CLEAR = 0xFE;
 
-        static KeyCode TranslateKey(int htmlKeyCode)
+        static int TranslateKey(int htmlKeyCode, KeyCode[] results)
         {
             switch (htmlKeyCode)
             {
                 case DOM_VK_UP:
-                    return KeyCode.UpArrow;
+                    results[0] = KeyCode.UpArrow; return 1;
                 case DOM_VK_DOWN:
-                    return KeyCode.DownArrow;
+                    results[0] = KeyCode.DownArrow; return 1;
                 case DOM_VK_LEFT:
-                    return KeyCode.LeftArrow;
+                    results[0] = KeyCode.LeftArrow; return 1;
                 case DOM_VK_RIGHT:
-                    return KeyCode.RightArrow;
+                    results[0] = KeyCode.RightArrow; return 1;
                 case DOM_VK_RETURN:
-                    return KeyCode.Return;
+                    results[0] = KeyCode.Return; return 1;
                 case DOM_VK_SPACE:
-                    return KeyCode.Space;
+                    results[0] = KeyCode.Space; return 1;
                 case DOM_VK_ESCAPE:
-                    return KeyCode.Escape;
+                    results[0] = KeyCode.Escape; return 1;
                 case DOM_VK_0:
-                    return KeyCode.Alpha0;
+                    results[0] = KeyCode.Alpha0; return 1;
                 case DOM_VK_1:
-                    return KeyCode.Alpha1;
+                    results[0] = KeyCode.Alpha1; return 1;
                 case DOM_VK_2:
-                    return KeyCode.Alpha2;
+                    results[0] = KeyCode.Alpha2; return 1;
                 case DOM_VK_3:
-                    return KeyCode.Alpha3;
+                    results[0] = KeyCode.Alpha3; return 1;
                 case DOM_VK_4:
-                    return KeyCode.Alpha4;
+                    results[0] = KeyCode.Alpha4; return 1;
                 case DOM_VK_5:
-                    return KeyCode.Alpha5;
+                    results[0] = KeyCode.Alpha5; return 1;
                 case DOM_VK_6:
-                    return KeyCode.Alpha6;
+                    results[0] = KeyCode.Alpha6; return 1;
                 case DOM_VK_7:
-                    return KeyCode.Alpha7;
+                    results[0] = KeyCode.Alpha7; return 1;
                 case DOM_VK_8:
-                    return KeyCode.Alpha8;
+                    results[0] = KeyCode.Alpha8; return 1;
                 case DOM_VK_9:
-                    return KeyCode.Alpha9;
+                    results[0] = KeyCode.Alpha9; return 1;
                 case DOM_VK_A:
-                    return KeyCode.A;
+                    results[0] = KeyCode.A; return 1;
                 case DOM_VK_B:
-                    return KeyCode.B;
+                    results[0] = KeyCode.B; return 1;
                 case DOM_VK_C:
-                    return KeyCode.C;
+                    results[0] = KeyCode.C; return 1;
                 case DOM_VK_D:
-                    return KeyCode.D;
+                    results[0] = KeyCode.D; return 1;
                 case DOM_VK_E:
-                    return KeyCode.E;
+                    results[0] = KeyCode.E; return 1;
                 case DOM_VK_F:
-                    return KeyCode.F;
+                    results[0] = KeyCode.F; return 1;
                 case DOM_VK_G:
-                    return KeyCode.G;
+                    results[0] = KeyCode.G; return 1;
                 case DOM_VK_H:
-                    return KeyCode.H;
+                    results[0] = KeyCode.H; return 1;
                 case DOM_VK_I:
-                    return KeyCode.I;
+                    results[0] = KeyCode.I; return 1;
                 case DOM_VK_J:
-                    return KeyCode.J;
+                    results[0] = KeyCode.J; return 1;
                 case DOM_VK_K:
-                    return KeyCode.K;
+                    results[0] = KeyCode.K; return 1;
                 case DOM_VK_L:
-                    return KeyCode.L;
+                    results[0] = KeyCode.L; return 1;
                 case DOM_VK_M:
-                    return KeyCode.M;
+                    results[0] = KeyCode.M; return 1;
                 case DOM_VK_N:
-                    return KeyCode.N;
+                    results[0] = KeyCode.N; return 1;
                 case DOM_VK_O:
-                    return KeyCode.O;
+                    results[0] = KeyCode.O; return 1;
                 case DOM_VK_P:
-                    return KeyCode.P;
+                    results[0] = KeyCode.P; return 1;
                 case DOM_VK_Q:
-                    return KeyCode.Q;
+                    results[0] = KeyCode.Q; return 1;
                 case DOM_VK_R:
-                    return KeyCode.R;
+                    results[0] = KeyCode.R; return 1;
                 case DOM_VK_S:
-                    return KeyCode.S;
+                    results[0] = KeyCode.S; return 1;
                 case DOM_VK_T:
-                    return KeyCode.T;
+                    results[0] = KeyCode.T; return 1;
                 case DOM_VK_U:
-                    return KeyCode.U;
+                    results[0] = KeyCode.U; return 1;
                 case DOM_VK_V:
-                    return KeyCode.V;
+                    results[0] = KeyCode.V; return 1;
                 case DOM_VK_W:
-                    return KeyCode.W;
+                    results[0] = KeyCode.W; return 1;
                 case DOM_VK_X:
-                    return KeyCode.X;
+                    results[0] = KeyCode.X; return 1;
                 case DOM_VK_Y:
-                    return KeyCode.Y;
+                    results[0] = KeyCode.Y; return 1;
                 case DOM_VK_Z:
-                    return KeyCode.Z;
+                    results[0] = KeyCode.Z; return 1;
+                case DOM_VK_F1:
+                    results[0] = KeyCode.F1; return 1;
+                case DOM_VK_F2:
+                    results[0] = KeyCode.F2; return 1;
+                case DOM_VK_F3:
+                    results[0] = KeyCode.F3; return 1;
+                case DOM_VK_F4:
+                    results[0] = KeyCode.F4; return 1;
+                case DOM_VK_F5:
+                    results[0] = KeyCode.F5; return 1;
+                case DOM_VK_F6:
+                    results[0] = KeyCode.F7; return 1;
+                case DOM_VK_F8:
+                    results[0] = KeyCode.F8; return 1;
+                case DOM_VK_F9:
+                    results[0] = KeyCode.F9; return 1;
+                case DOM_VK_F10:
+                    results[0] = KeyCode.F10; return 1;
+                case DOM_VK_F11:
+                    results[0] = KeyCode.F11; return 1;
+                case DOM_VK_F12:
+                    results[0] = KeyCode.F12; return 1;
+                case DOM_VK_SHIFT:
+                    results[0] = KeyCode.LeftShift; 
+                    results[1] = KeyCode.RightShift; 
+                    return 2;
+                case DOM_VK_ALT:
+                    results[0] = KeyCode.LeftAlt; 
+                    results[1] = KeyCode.RightAlt; 
+                    return 2;
+                case DOM_VK_CONTROL:
+                    results[0] = KeyCode.LeftControl; 
+                    results[1] = KeyCode.RightControl; 
+                    return 2;
+                case DOM_VK_WIN:
+                    results[0] = KeyCode.LeftWindows;
+                    results[1] = KeyCode.RightWindows;
+                    results[2] = KeyCode.LeftCommand;
+                    results[3] = KeyCode.RightCommand;
+                    return 4;
             }
-
-            return KeyCode.None;
+            return 0;
         }
     }
 

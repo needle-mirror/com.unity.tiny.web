@@ -69,7 +69,7 @@ namespace Unity.Tiny.Web
                 var messageBytesBuffer = entityCommandBuffer.AddBuffer<NativeMessageByte>(messageEntity);
                 CopyArrayToBuffer(messageBytesBuffer, byteArray, byteArrayLength, sizeof(byte));
 
-                entityCommandBuffer.Playback(World.Active.EntityManager);
+                entityCommandBuffer.Playback(World.DefaultGameObjectInjectionWorld.EntityManager);
             }
         }
 

@@ -84,7 +84,6 @@ mergeInto(LibraryManager.library, {
             var inp = ut._HTML.input;
             var eventType, x, y, touch, touches = ev.changedTouches;
             var buttons = 0;
-            var eventType;
             if (ev.type == "touchstart") eventType = 1;
             else if (ev.type == "touchend") eventType = 0;
             else if (ev.type == "touchcanceled") eventType = 3;
@@ -92,8 +91,8 @@ mergeInto(LibraryManager.library, {
             var rect = inp.canvas.getBoundingClientRect();
             for (var i = 0; i < touches.length; ++i) {
                 var t = touches[i];
-                var x = t.pageX - rect.left;
-                var y = rect.bottom - 1 - t.pageY; // (rect.bottom - rect.top) - 1 - (t.pageY - rect.top);
+                x = t.pageX - rect.left;
+                y = rect.bottom - 1 - t.pageY; // (rect.bottom - rect.top) - 1 - (t.pageY - rect.top);
                 inp.touchStream.push(eventType|0);
                 inp.touchStream.push(t.identifier|0);
                 inp.touchStream.push(x|0);

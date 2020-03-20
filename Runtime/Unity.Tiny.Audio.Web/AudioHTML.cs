@@ -223,8 +223,21 @@ namespace Unity.Tiny.Web
                                 AudioHTMLNativeCalls.Stop(ans.sourceID, true);
                             }
 
+                            float volume = audioSource.volume;
+                            float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
+
+                            // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener. 
+                            // It is much smoother to ramp up volume from zero than the alternative.
+                            if (mgr.HasComponent<Audio3dPanning>(e))
+                                volume = 0.0f;
+
                             int sourceID = ++IDPool.sourceID;
-                            AudioHTMLNativeCalls.Play(clip.clipID, sourceID, audioSource.volume, audioSource.pan, audioSource.loop);
+
+                            // Check the return value from Play because it fails sometimes at startup for AudioSources with PlayOnAwake set to true.
+                            // If initial attempt fails, try again next frame.
+                            if (!AudioHTMLNativeCalls.Play(clip.clipID, sourceID, volume, pan, audioSource.loop))
+                                return false;
+
                             AudioHTMLSource audioNativeSource = new AudioHTMLSource()
                             {
                                 sourceID = sourceID
@@ -236,7 +249,7 @@ namespace Unity.Tiny.Web
                             }
                             else
                             {
-                                PostUpdateCommands.AddComponent(e, audioNativeSource);
+                                mgr.AddComponentData(e, audioNativeSource);
                             }
 
                             return true;
@@ -297,6 +310,5 @@ namespace Unity.Tiny.Web
             }
             return false;
         }
-
     }
 }
