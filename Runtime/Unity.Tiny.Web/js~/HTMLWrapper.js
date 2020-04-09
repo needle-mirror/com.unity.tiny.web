@@ -46,6 +46,14 @@ mergeInto(LibraryManager.library, {
     HEAP32[hPtr>>2] = html.canvasElement.height | 0;
   },
 
+  js_html_validateWebGLContextFeatures__proxy: 'sync',
+  js_html_validateWebGLContextFeatures__deps: ['$GL'],
+  js_html_validateWebGLContextFeatures: function(requireSrgb) {
+    if (requireSrgb && GL.currentContext.version == 1 && !GLctx.getExtension('EXT_sRGB')) {
+      fatal('WebGL implementation in current browser does not support sRGB rendering (No EXT_sRGB or WebGL 2), but sRGB is required by this page!');
+    }
+  },
+
   js_html_setCanvasSize__proxy : 'sync',
   js_html_setCanvasSize : function(width, height, fbwidth, fbheight) {
     if (!width>0 || !height>0)

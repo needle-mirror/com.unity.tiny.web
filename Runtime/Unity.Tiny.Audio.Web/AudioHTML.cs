@@ -65,7 +65,7 @@ namespace Unity.Tiny.Web
 
         [DllImport(DLL, EntryPoint = "js_html_audioPlay")]
         [return: MarshalAs(UnmanagedType.I1)]
-        public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pan, bool loop);
+        public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pitch, double pan, bool loop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioStop")]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -78,6 +78,10 @@ namespace Unity.Tiny.Web
         [DllImport(DLL, EntryPoint = "js_html_audioSetPan")]
         [return: MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPan(int audioSourceIdx, double pan);
+
+        [DllImport(DLL, EntryPoint = "js_html_audioSetPitch")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool SetPitch(int audioSourceIdx, double pitch);
 
         [DllImport(DLL, EntryPoint = "js_html_audioIsPlaying")]
         [return: MarshalAs(UnmanagedType.I1)]
@@ -225,6 +229,7 @@ namespace Unity.Tiny.Web
 
                             float volume = audioSource.volume;
                             float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
+                            float pitch = mgr.HasComponent<AudioPitch>(e) ? mgr.GetComponentData<AudioPitch>(e).pitch : 1.0f;
 
                             // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener. 
                             // It is much smoother to ramp up volume from zero than the alternative.
@@ -235,7 +240,7 @@ namespace Unity.Tiny.Web
 
                             // Check the return value from Play because it fails sometimes at startup for AudioSources with PlayOnAwake set to true.
                             // If initial attempt fails, try again next frame.
-                            if (!AudioHTMLNativeCalls.Play(clip.clipID, sourceID, volume, pan, audioSource.loop))
+                            if (!AudioHTMLNativeCalls.Play(clip.clipID, sourceID, volume, pitch, pan, audioSource.loop))
                                 return false;
 
                             AudioHTMLSource audioNativeSource = new AudioHTMLSource()
@@ -306,6 +311,19 @@ namespace Unity.Tiny.Web
                 if (audioNativeSource.sourceID > 0)
                 {
                     return AudioHTMLNativeCalls.SetPan(audioNativeSource.sourceID, pan);
+                }
+            }
+            return false;
+        }
+
+        protected override bool SetPitch(Entity e, float pitch)
+        {
+            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            {
+                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
+                if (audioNativeSource.sourceID > 0)
+                {
+                    return AudioHTMLNativeCalls.SetPitch(audioNativeSource.sourceID, pitch);
                 }
             }
             return false;

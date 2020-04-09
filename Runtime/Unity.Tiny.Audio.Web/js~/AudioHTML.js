@@ -227,7 +227,7 @@ mergeInto(LibraryManager.library, {
     },
 
     // create audio source node
-    js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pan, loop) 
+    js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pitch, pan, loop) 
     {
         if (!this.audioContext || audioClipIdx < 0 || audioSourceIdx < 0)
             return false;
@@ -243,6 +243,7 @@ mergeInto(LibraryManager.library, {
         // create audio source node
         var sourceNode = this.audioContext.createBufferSource();
         sourceNode.buffer = srcBuffer;
+        sourceNode.playbackRate.value = pitch;
 
         var panNode = this.audioContext.createPanner();
         panNode.panningModel = 'equalpower';
@@ -297,7 +298,7 @@ mergeInto(LibraryManager.library, {
         this.audioSources[audioSourceIdx] = null;
 
         // stop audio source
-        if (dostop) {
+        if (sourceNode.isPlaying && dostop) {
             sourceNode.stop();
             sourceNode.isPlaying = false;
             //console.log("[Audio] stopping " + audioSourceIdx);
@@ -327,6 +328,19 @@ mergeInto(LibraryManager.library, {
             return false;
 
         ut._HTML.audio_setPan(sourceNode, pan);
+        return true;
+    },
+
+    js_html_audioSetPitch : function (audioSourceIdx, pitch) {
+        if (!this.audioContext || audioSourceIdx < 0)
+            return false;
+
+        // retrieve audio source node
+        var sourceNode = this.audioSources[audioSourceIdx];
+        if (!sourceNode)
+            return false;
+
+        sourceNode.playbackRate.value = pitch;
         return true;
     },
 
