@@ -80,14 +80,15 @@ namespace Unity.Tiny.Web
 
             // keys
             int keyStreamLen;
-            unsafe { fixed (int* ptr = streamBuf) { keyStreamLen = InputHTMLNativeCalls.JSGetKeyStream(streamBuf.Length, ptr); }}
+            unsafe { fixed(int* ptr = streamBuf) { keyStreamLen = InputHTMLNativeCalls.JSGetKeyStream(streamBuf.Length, ptr); }}
 
             for (int i = 0; i < keyStreamLen; i += 2)
             {
                 int action = streamBuf[i];
                 int key = streamBuf[i + 1];
                 int nkeys = TranslateKey(key, translatedKeys);
-                for ( int j=0; j<nkeys; j++ ) { 
+                for (int j = 0; j < nkeys; j++)
+                {
                     KeyCode translatedKey = translatedKeys[j];
                     if (translatedKey == KeyCode.None)
                         continue;
@@ -100,7 +101,7 @@ namespace Unity.Tiny.Web
 
             // mouse (move + up/down)
             int mouseStreamLen;
-            unsafe { fixed (int* ptr = streamBuf) { mouseStreamLen = InputHTMLNativeCalls.JSGetMouseStream(streamBuf.Length, ptr); }}
+            unsafe { fixed(int* ptr = streamBuf) { mouseStreamLen = InputHTMLNativeCalls.JSGetMouseStream(streamBuf.Length, ptr); }}
 
             m_inputState.mouseDeltaX = 0;
             m_inputState.mouseDeltaY = 0;
@@ -126,9 +127,23 @@ namespace Unity.Tiny.Web
             if (mouseStreamLen != 0)
                 m_inputState.hasMouse = true;
 
+            // scrollwheel
+            int wheelStreamLen;
+            unsafe { fixed(int* ptr = streamBuf) { wheelStreamLen = InputHTMLNativeCalls.JSGetWheelStream(streamBuf.Length, ptr); }}
+
+            m_inputState.scrollDeltaX = 0;
+            m_inputState.scrollDeltaY = 0;
+            for (int i = 0; i < wheelStreamLen; i += 2)
+            {
+                int x = streamBuf[i];
+                int y = streamBuf[i + 1];
+                m_inputState.scrollDeltaX = x;
+                m_inputState.scrollDeltaY = y;
+            }
+
             // touches
             int touchStreamLen;
-            unsafe { fixed (int* ptr = streamBuf) { touchStreamLen = InputHTMLNativeCalls.JSGetTouchStream(streamBuf.Length, ptr); }}
+            unsafe { fixed(int* ptr = streamBuf) { touchStreamLen = InputHTMLNativeCalls.JSGetTouchStream(streamBuf.Length, ptr); }}
             for (int i = 0; i < touchStreamLen; i += 4)
             {
                 int ev = streamBuf[i];
@@ -186,7 +201,7 @@ namespace Unity.Tiny.Web
                             m_inputState.mouseDeltaX += x - mouseLastX;
                             m_inputState.mouseDeltaY += y - mouseLastY;
                         }
-                        
+
                         mouseLastX = x;
                         mouseLastY = y;
                         mouseInitDelta = false;
@@ -496,16 +511,16 @@ namespace Unity.Tiny.Web
                 case DOM_VK_F12:
                     results[0] = KeyCode.F12; return 1;
                 case DOM_VK_SHIFT:
-                    results[0] = KeyCode.LeftShift; 
-                    results[1] = KeyCode.RightShift; 
+                    results[0] = KeyCode.LeftShift;
+                    results[1] = KeyCode.RightShift;
                     return 2;
                 case DOM_VK_ALT:
-                    results[0] = KeyCode.LeftAlt; 
-                    results[1] = KeyCode.RightAlt; 
+                    results[0] = KeyCode.LeftAlt;
+                    results[1] = KeyCode.RightAlt;
                     return 2;
                 case DOM_VK_CONTROL:
-                    results[0] = KeyCode.LeftControl; 
-                    results[1] = KeyCode.RightControl; 
+                    results[0] = KeyCode.LeftControl;
+                    results[1] = KeyCode.RightControl;
                     return 2;
                 case DOM_VK_WIN:
                     results[0] = KeyCode.LeftWindows;
@@ -522,7 +537,7 @@ namespace Unity.Tiny.Web
     {
         // directly calls out to JS!
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputInit")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool JSInitInput();
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputResetStreams")]
@@ -537,15 +552,18 @@ namespace Unity.Tiny.Web
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetMouseStream")]
         public static extern unsafe int JSGetMouseStream(int maxLen, int* dest);
 
+        [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetWheelStream")]
+        public static extern unsafe int JSGetWheelStream(int maxLen, int* dest);
+
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetTouchStream")]
         public static extern unsafe int JSGetTouchStream(int maxLen, int* dest);
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetCanvasLost")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool JSGetCanvasLost();
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetFocusLost")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool JSGetFocusLost();
     }
 }

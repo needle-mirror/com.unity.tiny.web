@@ -17,13 +17,13 @@ mergeInto(LibraryManager.library, {
         // call this method on touch start to create and play a buffer, then check
         // if the audio actually played to determine if audio has now been
         // unlocked on iOS, Android, etc.
-            if (!self.audioContext || self.unlocked)
+            if (!self.audioContext || self.unlockState == 2/*unlocked*/)
                 return;
 
             function unlocked() {
                 // update the unlocked state and prevent this check from happening
                 // again
-                self.unlocked = true;
+                self.unlockState = 2/*unlocked*/;
                 delete self.unlockBuffer;
                 //console.log("[Audio] unlocked");
 
@@ -95,7 +95,7 @@ mergeInto(LibraryManager.library, {
         this.audioSources = {};
 
         // try to unlock audio
-        this.unlocked = false;
+        this.unlockState = 0/*locked*/;
         var navigator = (typeof window !== 'undefined' && window.navigator)
             ? window.navigator
             : null;
@@ -107,20 +107,28 @@ mergeInto(LibraryManager.library, {
         if (this.audioContext.state !== 'running' || isMobile || isTouch) {
             ut._HTML.unlock();
         } else {
-            this.unlocked = true;
+            this.unlockState = 2/*unlocked*/;
         }
-        //console.log("[Audio] initialized " + (this.unlocked ? "unlocked" : "locked"));
+
+        document.addEventListener('visibilitychange', function() {
+            if ((document.visibilityState === 'visible') && audioContext.resume)
+                audioContext.resume();
+            else if ((document.visibilityState !== 'visible') && audioContext.suspend)
+                audioContext.suspend();
+        }, true);
+
+        //console.log("[Audio] initialized " + (["locked", "unlocking", "unlocked"][this.unlockState]));
         return true;
     },
 
     js_html_audioIsUnlocked : function() {
-        return this.unlocked;
+        return this.unlockState == 2/*unlocked*/;
     },
 
     // unlock audio for browsers
     js_html_audioUnlock : function () {
         var self = this;
-        if (self.unlocked || !self.audioContext ||
+        if (self.unlockState == 0/*locked*/ || !self.audioContext ||
             typeof self.audioContext.resume !== 'function')
             return;
 
@@ -130,6 +138,9 @@ mergeInto(LibraryManager.library, {
         document.addEventListener('touchend', ut._HTML.unlock, true);
         document.addEventListener('keydown', ut._HTML.unlock, true);
         document.addEventListener('keyup', ut._HTML.unlock, true);
+        // Record that we are now in the unlocking attempt stage so that the above event listeners
+        // will not be attempted to be registered again.
+        self.unlockState = 1/*unlocking*/;
     },
 
     // pause audio context

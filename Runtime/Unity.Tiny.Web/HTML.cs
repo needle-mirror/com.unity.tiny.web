@@ -20,7 +20,7 @@ namespace Unity.Tiny.Web
         {
             var env = World.TinyEnvironment();
             var config = env.GetConfigData<DisplayInfo>();
-            pixels = new NativeArray<byte>(config.framebufferWidth*config.framebufferHeight*4, Allocator.Persistent);
+            pixels = new NativeArray<byte>(config.framebufferWidth * config.framebufferHeight * 4, Allocator.Persistent);
             unsafe
             {
                 HTMLNativeCalls.debugReadback(config.framebufferWidth, config.framebufferHeight, pixels.GetUnsafePtr());
@@ -106,7 +106,9 @@ namespace Unity.Tiny.Web
                 // TODO DOTSR-994 -- this is a case where we're using width/height as read/write instead of as explicit read or write only
                 wCanvas = di.width;
                 hCanvas = di.height;
-            } else {
+            }
+            else
+            {
                 HTMLNativeCalls.getCanvasSize(ref wCanvas, ref hCanvas);
             }
 
@@ -117,8 +119,8 @@ namespace Unity.Tiny.Web
             }
 
             // TODO DOTSR-994 -- the framebufferWidth/Height should be directly configurable
-            di.framebufferWidth = (int) (di.width * di.screenDpiScale);
-            di.framebufferHeight = (int) (di.height * di.screenDpiScale);
+            di.framebufferWidth = (int)(di.width * di.screenDpiScale);
+            di.framebufferHeight = (int)(di.height * di.screenDpiScale);
 
             unsafe
             {
@@ -144,7 +146,7 @@ namespace Unity.Tiny.Web
     {
         // calls to HTMLWrapper.cpp
         [DllImport("lib_unity_tiny_web", EntryPoint = "init_html")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool init();
 
         [DllImport("lib_unity_tiny_web", EntryPoint = "shutdown_html")]
@@ -172,6 +174,4 @@ namespace Unity.Tiny.Web
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_getDPIScale")]
         public static extern float getDPIScale();
     }
-
 }
-

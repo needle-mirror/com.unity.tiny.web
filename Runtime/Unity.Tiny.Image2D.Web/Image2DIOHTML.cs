@@ -12,7 +12,6 @@ using Unity.Tiny.GenericAssetLoading;
  */
 namespace Unity.Tiny.Web
 {
-
     public struct Image2DHTML : ISystemStateComponentData
     {
         public int imageIndex;
@@ -31,13 +30,13 @@ namespace Unity.Tiny.Web
         public static extern void JSInitImageLoading();
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_loadImage", CharSet = CharSet.Ansi)]
-        public static extern int JSLoadImage([MarshalAs(UnmanagedType.LPStr)]string imageFile, [MarshalAs(UnmanagedType.LPStr)]string maskFile);
+        public static extern int JSLoadImage([MarshalAs(UnmanagedType.LPStr)] string imageFile, [MarshalAs(UnmanagedType.LPStr)] string maskFile);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_checkLoadImage")]
         public static extern int JSCheckLoadImage(int idx);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_finishLoadImage")]
-        public static extern void JSFinishLoadImage (int idx, ref int w, ref int h, ref int hasAlpha);
+        public static extern void JSFinishLoadImage(int idx, ref int w, ref int h, ref int hasAlpha);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_freeImage")]
         public static extern void JSFreeImage(int idx);
@@ -46,20 +45,19 @@ namespace Unity.Tiny.Web
         public static extern unsafe void ExtractAlphaFromImage(int idx, byte* destPtr, int w, int h);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_imageToDataURI")]
-        public static extern unsafe byte *ImageToDataURI (int idx, int w, int h);
+        public static extern unsafe byte *ImageToDataURI(int idx, int w, int h);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_imagePostRequestStatus")]
-        public static extern unsafe int ImagePostRequestStatus (int idx);
+        public static extern unsafe int ImagePostRequestStatus(int idx);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_imagePostRequest", CharSet = CharSet.Ansi)]
-        public static extern unsafe int ImagePostRequest (int idx, int w, int h, [MarshalAs(UnmanagedType.LPStr)]string uri);
+        public static extern unsafe int ImagePostRequest(int idx, int w, int h, [MarshalAs(UnmanagedType.LPStr)] string uri);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_imageToMemory")]
         public static extern unsafe int ImageToMemory(int idx, int w, int h, byte* destPtr);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_imageFromMemory")]
-        public static extern unsafe int ImageFromMemory (int idx, int w, int h, byte *src);
-
+        public static extern unsafe int ImageFromMemory(int idx, int w, int h, byte *src);
     }
 
 
@@ -114,7 +112,7 @@ namespace Unity.Tiny.Web
                 image.imagePixelHeight = 0;
                 image.imagePixelWidth = 0;
                 FreeNative(man, e, ref imgHTML);
-                Console.WriteLine("Failed to load "+fnLog);
+                Console.WriteLine("Failed to load " + fnLog);
                 return LoadResult.failed;
             }
 
@@ -157,7 +155,7 @@ namespace Unity.Tiny.Web
     }
 
     [UpdateInGroup(typeof(InitializationSystemGroup))]
-    public class Image2DIOHTMLSystem : GenericAssetLoader< Image2D, Image2DHTML, Image2DLoadFromFile, Image2DHTMLLoading >
+    public class Image2DIOHTMLSystem : GenericAssetLoader<Image2D, Image2DHTML, Image2DLoadFromFile, Image2DHTMLLoading>
     {
         protected override void OnCreate()
         {
@@ -172,6 +170,4 @@ namespace Unity.Tiny.Web
             base.OnUpdate();
         }
     }
-
-
 }

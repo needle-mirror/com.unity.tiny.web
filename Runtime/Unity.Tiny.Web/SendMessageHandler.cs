@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
@@ -81,7 +81,7 @@ namespace Unity.Tiny.Web
 
         [AttributeUsage(AttributeTargets.Method)]
         class MonoPInvokeCallbackAttribute : Attribute {}
-        
+
         [AttributeUsage(AttributeTargets.Class)]
         class PreserveAttribute : System.Attribute {}
     }

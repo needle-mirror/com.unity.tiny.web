@@ -33,11 +33,11 @@ namespace Unity.Tiny.Web
         private const string DLL = "lib_unity_tiny_audio_web";
 
         [DllImport(DLL, EntryPoint = "js_html_initAudio")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool Init();
 
         [DllImport(DLL, EntryPoint = "js_html_audioIsUnlocked")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool IsUnlocked();
 
         [DllImport(DLL, EntryPoint = "js_html_audioUnlock")]
@@ -51,7 +51,7 @@ namespace Unity.Tiny.Web
 
         // Note this just returns the audioClipIndex, which isn't super helpful.
         [DllImport(DLL, EntryPoint = "js_html_audioStartLoadFile", CharSet = CharSet.Ansi)]
-        public static extern int StartLoad([MarshalAs(UnmanagedType.LPStr)]string audioClipName, int audioClipIndex);
+        public static extern int StartLoad([MarshalAs(UnmanagedType.LPStr)] string audioClipName, int audioClipIndex);
 
         // LoadResult:
         // stillWorking = 0,
@@ -64,27 +64,27 @@ namespace Unity.Tiny.Web
         public static extern void Free(int audioClipIndex);
 
         [DllImport(DLL, EntryPoint = "js_html_audioPlay")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pitch, double pan, bool loop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioStop")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool Stop(int audioSourceIdx, bool doStop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetVolume")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetVolume(int audioSourceIdx, double volume);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetPan")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPan(int audioSourceIdx, double pan);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetPitch")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool SetPitch(int audioSourceIdx, double pitch);
 
         [DllImport(DLL, EntryPoint = "js_html_audioIsPlaying")]
-        [return: MarshalAs(UnmanagedType.I1)]
+        [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool IsPlaying(int audioSourceIdx);
     }
 
@@ -113,7 +113,7 @@ namespace Unity.Tiny.Web
 
         public LoadResult CheckLoading(IntPtr cppWrapper, EntityManager man, Entity e, ref AudioClip audioClip, ref AudioHTMLClip audioNative, ref AudioClipLoadFromFile param, ref AudioHTMLLoading loading)
         {
-            LoadResult result = (LoadResult) AudioHTMLNativeCalls.CheckLoad(audioNative.clipID);
+            LoadResult result = (LoadResult)AudioHTMLNativeCalls.CheckLoad(audioNative.clipID);
 
             if (result == LoadResult.success)
             {
@@ -231,7 +231,7 @@ namespace Unity.Tiny.Web
                             float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
                             float pitch = mgr.HasComponent<AudioPitch>(e) ? mgr.GetComponentData<AudioPitch>(e).pitch : 1.0f;
 
-                            // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener. 
+                            // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener.
                             // It is much smoother to ramp up volume from zero than the alternative.
                             if (mgr.HasComponent<Audio3dPanning>(e))
                                 volume = 0.0f;

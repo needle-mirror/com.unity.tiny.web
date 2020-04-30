@@ -14,6 +14,13 @@ mergeInto(LibraryManager.library, {
                                     canvas.mozRequestPointerLock;
         document.exitPointerLock = document.exitPointerLock ||
                                    document.mozExitPointerLock;
+
+        // Calculate the pixelRatio rather than get it from window.devicePixelRatio,
+        // for when custom pixel ratios are supported.
+        function getPixelRatio() {
+            var rect = inp.canvas.getBoundingClientRect();
+            return inp.canvas.width / rect.width;
+        }
         
         inp.getStream = function(stream,maxLen,destPtr) {
             destPtr>>=2;
@@ -65,18 +72,70 @@ mergeInto(LibraryManager.library, {
             else if (ev.type == "mousedown") { eventType = 1; buttons = ev.button; }
             else if (ev.type == "mousemove") { eventType = 2; }
             else return;
-            var rect = inp.canvas.getBoundingClientRect();
-            var x = ev.pageX - rect.left;
-            var y = rect.bottom - 1 - ev.pageY; // (rect.bottom - rect.top) - 1 - (ev.pageY - rect.top);
-            var dx = ev.movementX;
-            var dy = ev.movementY;
+            var pixelRatio = getPixelRatio();
+            var x = Math.round(ev.clientX * pixelRatio) | 0;
+            var y = Math.round((ev.target.clientHeight - 1 - ev.clientY) * pixelRatio) | 0;
+            var dx = Math.round(ev.movementX * pixelRatio) | 0;
+            var dy = Math.round(ev.movementY * pixelRatio) | 0;
             inp.mouseStream.push(eventType|0);
             inp.mouseStream.push(buttons|0);
-            inp.mouseStream.push(x|0);
-            inp.mouseStream.push(y|0);
-            inp.mouseStream.push(dx|0);
-            inp.mouseStream.push(dy|0);
+            inp.mouseStream.push(x);
+            inp.mouseStream.push(y);
+            inp.mouseStream.push(dx);
+            inp.mouseStream.push(dy);
             ev.preventDefault(); 
+            ev.stopPropagation();
+        };
+
+        // It appears that the scale of scroll wheel input values varies greatly across
+        // browsers, different versions of the same browser, OSes and input devices.
+        // Trying the approach proposed here to normalize input values:
+        // http://jsbin.com/toyaqegumu/edit?html,css,js,output
+        var normalizeWheelDelta = function() {
+            // Keep a distribution of observed values, and scale by the
+            // 33rd percentile.
+            var distribution = [];
+            var done = null;
+            var scale = 1;
+            return function(n) {
+              // Zeroes don't count.
+              if (n == 0) return n;
+              // After 500 samples, we stop sampling and keep current factor.
+              if (done !== null) return n * done;
+              var abs = Math.abs(n);
+              // Insert value (sorted in ascending order).
+              outer: do { // Just used for break goto
+                for (var i = 0; i < distribution.length; ++i) {
+                  if (abs <= distribution[i]) {
+                    distribution.splice(i, 0, abs);
+                    break outer;
+                  }
+                }
+                distribution.push(abs);
+              } while (false);
+              // Factor is scale divided by 33rd percentile.
+              var factor = scale / distribution[Math.floor(distribution.length / 3)];
+              if (distribution.length == 500) done = factor;
+              return n * factor;
+            };
+        }();
+
+        inp.wheelEventFn = function(ev) {
+            var dx = ev.deltaX;
+            var dy = ev.deltaY;
+            if (dx) {
+                var ndx = Math.round(normalizeWheelDelta(dx));
+                if (!ndx) ndx = dx > 0 ? 1 : -1;
+                dx = ndx;
+            }
+            if (dy) {
+                var ndy = Math.round(normalizeWheelDelta(dy));
+                if (!ndy) ndy = dy > 0 ? 1 : -1;
+                dy = ndy;
+            }
+            inp.wheelStream.push(dx|0);
+            inp.wheelStream.push(dy|0);
+            ev.preventDefault();
             ev.stopPropagation();
         };
         
@@ -86,17 +145,17 @@ mergeInto(LibraryManager.library, {
             var buttons = 0;
             if (ev.type == "touchstart") eventType = 1;
             else if (ev.type == "touchend") eventType = 0;
-            else if (ev.type == "touchcanceled") eventType = 3;
+            else if (ev.type == "touchcancel") eventType = 3;
             else eventType = 2;
-            var rect = inp.canvas.getBoundingClientRect();
+            var pixelRatio = getPixelRatio();
             for (var i = 0; i < touches.length; ++i) {
                 var t = touches[i];
-                x = t.pageX - rect.left;
-                y = rect.bottom - 1 - t.pageY; // (rect.bottom - rect.top) - 1 - (t.pageY - rect.top);
+                x = Math.round(t.clientX * pixelRatio) | 0;
+                y = Math.round((t.target.clientHeight - 1 - t.clientY) * pixelRatio) | 0;
                 inp.touchStream.push(eventType|0);
                 inp.touchStream.push(t.identifier|0);
-                inp.touchStream.push(x|0);
-                inp.touchStream.push(y|0);
+                inp.touchStream.push(x);
+                inp.touchStream.push(y);
             }
             ev.preventDefault();
             ev.stopPropagation();
@@ -140,6 +199,7 @@ mergeInto(LibraryManager.library, {
         };
 
         inp.mouseStream = [];
+        inp.wheelStream = [];
         inp.keyStream = [];  
         inp.touchStream = [];
         inp.canvas = canvas; 
@@ -157,6 +217,7 @@ mergeInto(LibraryManager.library, {
         events["keyup"] = inp.keyEventFn;        
         events["touchstart"] = events["touchend"] = events["touchmove"] = events["touchcancel"] = inp.touchEventFn;
         events["mousedown"] = events["mouseup"] = events["mousemove"] = inp.mouseEventFn;
+        events["wheel"] = inp.wheelEventFn;
         events["focusout"] = inp.focusoutEventFn;
         events["click"] = inp.clickEventFn;
 
@@ -165,6 +226,8 @@ mergeInto(LibraryManager.library, {
                
         document.addEventListener('pointerlockchange', inp.cursorLockChangeFn);
         document.addEventListener('mozpointerlockchange', inp.cursorLockChangeFn);
+        // Detect when the user changes apps/browser tabs on iOS, to reset the touch events.
+        document.addEventListener("visibilitychange", inp.focusoutEventFn);
 
         return true;   
     },
@@ -214,11 +277,18 @@ mergeInto(LibraryManager.library, {
         var inp = ut._HTML.input;
         return inp.getStream(inp.mouseStream,maxLen,destPtr);
     },
+
+    js_inputGetWheelStream__proxy : 'sync',
+    js_inputGetWheelStream : function (maxLen,destPtr) {
+        var inp = ut._HTML.input;
+        return inp.getStream(inp.wheelStream,maxLen,destPtr);
+    },
     
     js_inputResetStreams__proxy : 'async',
     js_inputResetStreams : function (maxLen,destPtr) {
         var inp = ut._HTML.input;
         inp.mouseStream.length = 0;
+        inp.wheelStream.length = 0;
         inp.keyStream.length = 0;
         inp.touchStream.length = 0;
     }
