@@ -35,7 +35,7 @@ namespace Unity.Tiny.Web
 
             // must init after window
             InputHTMLNativeCalls.JSInitInput();
-            firstTouch = -1;
+            MouseEmulateReset();
             initialized = true;
         }
 
@@ -46,10 +46,6 @@ namespace Unity.Tiny.Web
 
         private const int maxStreamLen = 1024;
         private int[] streamBuf = new int[maxStreamLen];
-        private int firstTouch = -1;
-        private bool mouseInitDelta = true;
-        private int mouseLastX = 0;
-        private int mouseLastY = 0;
         private const int maxTranslatedKeys = 8;
         private KeyCode[] translatedKeys = new KeyCode[maxTranslatedKeys];
 
@@ -61,8 +57,7 @@ namespace Unity.Tiny.Web
                 m_inputState.Clear();
                 InputHTMLNativeCalls.JSResetStreams();
                 InputHTMLNativeCalls.JSInitInput();
-                firstTouch = -1;
-                mouseInitDelta = true;
+                MouseEmulateReset();
                 return;
             }
 
@@ -70,8 +65,7 @@ namespace Unity.Tiny.Web
             {
                 m_inputState.Clear();
                 InputHTMLNativeCalls.JSResetStreams();
-                firstTouch = -1;
-                mouseInitDelta = true;
+                MouseEmulateReset();
                 return;
             }
 
@@ -168,45 +162,7 @@ namespace Unity.Tiny.Web
                     default:
                         continue;
                 }
-                m_inputState.TouchEvent(id, phase, x, y);
-
-                // simulate mouse from touch as well
-                if (!m_inputState.hasMouse)
-                {
-                    if (ev == 0 || ev == 3)
-                    {
-                        if (firstTouch == id)
-                        {
-                            m_inputState.MouseUp(0);
-                            firstTouch = -1;
-                            mouseInitDelta = true;
-                        }
-                    }
-                    else if (ev == 1)
-                    {
-                        if (firstTouch == -1)
-                        {
-                            firstTouch = id;
-                            m_inputState.MouseDown(0);
-                        }
-                    }
-
-                    if (firstTouch == id)
-                    {
-                        m_inputState.mouseX = x;
-                        m_inputState.mouseY = y;
-
-                        if (!mouseInitDelta)
-                        {
-                            m_inputState.mouseDeltaX += x - mouseLastX;
-                            m_inputState.mouseDeltaY += y - mouseLastY;
-                        }
-
-                        mouseLastX = x;
-                        mouseLastY = y;
-                        mouseInitDelta = false;
-                    }
-                }
+                ProcessTouch(id, phase, x, y);
             }
             InputHTMLNativeCalls.JSResetStreams();
         }

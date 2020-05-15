@@ -128,7 +128,7 @@ mergeInto(LibraryManager.library, {
     // unlock audio for browsers
     js_html_audioUnlock : function () {
         var self = this;
-        if (self.unlockState == 0/*locked*/ || !self.audioContext ||
+        if (self.unlockState >= 1/*unlocking or unlocked*/ || !self.audioContext ||
             typeof self.audioContext.resume !== 'function')
             return;
 
