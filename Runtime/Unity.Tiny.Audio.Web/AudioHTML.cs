@@ -3,6 +3,9 @@ using Unity.Tiny.GenericAssetLoading;
 using Unity.Entities;
 using Unity.Tiny.Audio;
 using System.Runtime.InteropServices;
+#if ENABLE_DOTSPLAYER_PROFILER
+using Unity.Development.Profiling;
+#endif
 
 namespace Unity.Tiny.Web
 {
@@ -63,6 +66,14 @@ namespace Unity.Tiny.Web
         [DllImport(DLL, EntryPoint = "js_html_audioFree")]
         public static extern void Free(int audioClipIndex);
 
+#if ENABLE_DOTSPLAYER_PROFILER
+        [DllImport(DLL, EntryPoint = "js_html_getRequiredMemoryUncompressed")]
+        public static extern int GetRequiredMemoryUncompressed(int clipID);
+
+        [DllImport(DLL, EntryPoint = "js_html_getRequiredMemoryCompressed")]
+        public static extern int GetRequiredMemoryCompressed(int clipID);
+#endif
+
         [DllImport(DLL, EntryPoint = "js_html_audioPlay")]
         [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pitch, double pan, bool loop);
@@ -86,6 +97,9 @@ namespace Unity.Tiny.Web
         [DllImport(DLL, EntryPoint = "js_html_audioIsPlaying")]
         [return : MarshalAs(UnmanagedType.I1)]
         public static extern bool IsPlaying(int audioSourceIdx);
+
+        [DllImport(DLL, EntryPoint = "js_html_audioUpdate")]
+        public static extern void Update();
     }
 
     class AudioHTMLSystemLoadFromFile : IGenericAssetLoader<AudioClip, AudioHTMLClip, AudioClipLoadFromFile, AudioHTMLLoading>
@@ -118,6 +132,22 @@ namespace Unity.Tiny.Web
             if (result == LoadResult.success)
             {
                 audioClip.status = AudioClipStatus.Loaded;
+#if ENABLE_DOTSPLAYER_PROFILER
+                ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
+                int memUncompressed = AudioHTMLNativeCalls.GetRequiredMemoryUncompressed(audioNative.clipID);
+                int memCompressed = AudioHTMLNativeCalls.GetRequiredMemoryCompressed(audioNative.clipID);
+                long bytes = memUncompressed + memCompressed;
+                ProfilerStats.AccumStats.memAudio.Accumulate(bytes);
+                ProfilerStats.AccumStats.memReservedAudio.Accumulate(bytes);
+                ProfilerStats.AccumStats.memUsedAudio.Accumulate(bytes);
+
+                ProfilerStats.AccumStats.audioSampleMemory.Accumulate(memUncompressed);
+                ProfilerStats.AccumStats.audioStreamFileMemory.Accumulate(memCompressed);
+
+                // WebGL audio loading doesn't use our unsafeutility heap allocator so we need to track our own stats
+                ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
+                ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
+#endif
             }
             else if (result == LoadResult.failed)
             {
@@ -129,6 +159,22 @@ namespace Unity.Tiny.Web
 
         public void FreeNative(EntityManager man, Entity e, ref AudioHTMLClip audioNative)
         {
+#if ENABLE_DOTSPLAYER_PROFILER
+            ProfilerStats.AccumStats.memAudioCount.Accumulate(-1);
+            int memUncompressed = AudioHTMLNativeCalls.GetRequiredMemoryUncompressed(audioNative.clipID);
+            int memCompressed = AudioHTMLNativeCalls.GetRequiredMemoryCompressed(audioNative.clipID);
+            long bytes = -(memUncompressed + memCompressed);
+            ProfilerStats.AccumStats.memAudio.Accumulate(bytes);
+            ProfilerStats.AccumStats.memReservedAudio.Accumulate(bytes);
+            ProfilerStats.AccumStats.memUsedAudio.Accumulate(bytes);
+
+            ProfilerStats.AccumStats.audioSampleMemory.Accumulate(-memUncompressed);
+            ProfilerStats.AccumStats.audioStreamFileMemory.Accumulate(-memCompressed);
+
+            // WebGL audio loading doesn't use our unsafeutility heap allocator so we need to track our own stats
+            ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
+            ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
+#endif
             AudioHTMLNativeCalls.Free(audioNative.clipID);
         }
 
@@ -168,6 +214,8 @@ namespace Unity.Tiny.Web
                 else
                     AudioHTMLNativeCalls.Resume();
             }
+
+            AudioHTMLNativeCalls.Update();
         }
 
         protected override void InitAudioSystem()

@@ -13,10 +13,16 @@ mergeInto(LibraryManager.library, {
             sourceNode.panNode.setPosition(pan, 0, 1 - Math.abs(pan));
         };
 
+        ut._HTML.audio_isSafari = function() {
+            var isChrome = window.navigator.userAgent.indexOf("Chrome") > -1;
+            var isSafari = !isChrome && (window.navigator.userAgent.indexOf("Safari") > -1);
+            return isSafari;
+        };
+
         ut._HTML.unlock = function() {
-        // call this method on touch start to create and play a buffer, then check
-        // if the audio actually played to determine if audio has now been
-        // unlocked on iOS, Android, etc.
+            // call this method on touch start to create and play a buffer, then check
+            // if the audio actually played to determine if audio has now been
+            // unlocked on iOS, Android, etc.
             if (!self.audioContext || self.unlockState == 2/*unlocked*/)
                 return;
 
@@ -40,13 +46,6 @@ mergeInto(LibraryManager.library, {
                 unlocked();
                 return;
             }
-
-            // Limit unlock attempts to two times per second (arbitrary, to avoid a flood
-            // of hundreds of unlocks per second)
-            var now = performance.now();
-            if (self.lastUnlockAttempted && now - self.lastUnlockAttempted < 500)
-                return;
-            self.lastUnlockAttempted = now;
 
             // fix Android can not play in suspend state
             if (self.audioContext.resume) self.audioContext.resume();
@@ -91,8 +90,11 @@ mergeInto(LibraryManager.library, {
         audioContext.listener.setPosition(0, 0, 0);
 
         this.audioContext = audioContext;
-        this.audioBuffers = {};
+        this.audioClips = {};
         this.audioSources = {};
+        this.compressedAudioBufferBytes = 0;
+        this.uncompressedAudioBufferBytes = 0;
+        this.uncompressedAudioBufferBytesMax = 50*1024*1024;
 
         // try to unlock audio
         this.unlockState = 0/*locked*/;
@@ -104,18 +106,23 @@ mergeInto(LibraryManager.library, {
         var isTouch = !!(isMobile ||
             (navigator && navigator.maxTouchPoints > 0) ||
             (navigator && navigator.msMaxTouchPoints > 0));
+        var isMobileSafari = isMobile && ut._HTML.audio_isSafari();
+
         if (this.audioContext.state !== 'running' || isMobile || isTouch) {
             ut._HTML.unlock();
         } else {
             this.unlockState = 2/*unlocked*/;
         }
 
-        document.addEventListener('visibilitychange', function() {
-            if ((document.visibilityState === 'visible') && audioContext.resume)
-                audioContext.resume();
-            else if ((document.visibilityState !== 'visible') && audioContext.suspend)
-                audioContext.suspend();
-        }, true);
+        if (!isMobileSafari)
+        {
+            document.addEventListener('visibilitychange', function() {
+                if ((document.visibilityState === 'visible') && audioContext.resume)
+                    audioContext.resume();
+                else if ((document.visibilityState !== 'visible') && audioContext.suspend)
+                    audioContext.suspend();
+            }, true);
+        }
 
         //console.log("[Audio] initialized " + (["locked", "unlocking", "unlocked"][this.unlockState]));
         return true;
@@ -157,6 +164,56 @@ mergeInto(LibraryManager.library, {
         }
     },
 
+    js_html_audioUpdate : function() {
+        // To truly implement least-recently played, we would walk the list of sounds once for each sound we unload. Instead, to be more
+        // efficient CPU-wise, we will just walk the list twice. 
+
+        // Pass #1. Unload all sounds that have not been playing in notRecentlyUsedRefCount frames (a long time). In addition, on this first pass,
+        // we'll also unload any really large sounds that aren't currently playing.
+        var notRecentlyPlayedSeconds = 15.0;
+        var largeAudioAssetSize = 4*1024*1024;
+        var currentTime = this.audioContext.currentTime;
+        for (var audioClipIdx in this.audioClips) {
+            if (this.uncompressedAudioBufferBytes <= this.uncompressedAudioBufferBytesMax)
+                break;
+
+            var audioClip = this.audioClips[audioClipIdx];
+            if (audioClip && (audioClip.loadingStatus == 3/*uncompressed loaded*/))
+            {
+                var notPlaying = audioClip.refCount <= 0;
+                var notRecentlyPlayed = (currentTime - audioClip.lastPlayedTime >= notRecentlyPlayedSeconds);
+                var uncompressedAudioBufferSize = audioClip.uncompressedAudioBuffer.length * audioClip.uncompressedAudioBuffer.numberOfChannels * 4;
+                var largeAudioAsset = uncompressedAudioBufferSize >= largeAudioAssetSize;
+
+                if (notPlaying && (notRecentlyPlayed || largeAudioAsset)) {   
+                    this.uncompressedAudioBufferBytes -= uncompressedAudioBufferSize;
+                    audioClip.loadingStatus = 1/*compressed loaded*/;
+                    audioClip.refCount = 0;
+                    audioClip.uncompressedAudioBuffer = null;
+                    //console.log("Unloading clip " + audioClipIdx);
+                }
+            }
+        }
+
+        // Pass #2. Unload any unused sounds until we get down to our audio memory budget (uncompressedAudioBufferBytesMax).
+        for (var audioClipIdx in this.audioClips) {
+            if (this.uncompressedAudioBufferBytes <= this.uncompressedAudioBufferBytesMax)
+                break;
+
+            var audioClip = this.audioClips[audioClipIdx];
+            if (audioClip && (audioClip.loadingStatus == 3/*uncompressed loaded*/) && (audioClip.refCount <= 0))
+            {
+                var uncompressedAudioBufferSize = audioClip.uncompressedAudioBuffer.length * audioClip.uncompressedAudioBuffer.numberOfChannels * 4;
+
+                this.uncompressedAudioBufferBytes -= uncompressedAudioBufferSize;
+                audioClip.loadingStatus = 1/*compressed loaded*/;
+                audioClip.refCount = 0;
+                audioClip.uncompressedAudioBuffer = null;
+                //console.log("Unloading clip " + audioClipIdx);
+            }
+        }
+    },
+
     // load audio clip
     js_html_audioStartLoadFile : function (audioClipName, audioClipIdx) 
     {
@@ -169,73 +226,128 @@ mergeInto(LibraryManager.library, {
         if (url.substring(0, 9) === "ut-asset:")
             url = UT_ASSETS[url.substring(9)];
 
+#if SINGLE_FILE
+        this.audioClips[audioClipIdx] = {
+            url: url,
+            loadingStatus: 4/*error*/,
+        };
+        var asset = SINGLE_FILE_ASSETS[url];
+        if (asset) {
+            this.audioClips[audioClipIdx].loadingStatus = 1;/*loaded compressed*/
+            this.audioClips[audioClipIdx].compressedAudioBuffer = base64Decode(asset).buffer;
+        }
+#else
         var self = this;
         var request = new XMLHttpRequest();
 
-        self.audioBuffers[audioClipIdx] = 'loading';
+        self.audioClips[audioClipIdx] = {
+            loadingStatus: 0/*loading compressed*/,
+            url: url
+        };
+        
+        //console.log("Start loading clip " + audioClipIdx);
         request.open('GET', url, true);
         request.responseType = 'arraybuffer';
         request.onload =
             function () {
-                self.audioContext.decodeAudioData(request.response, function (buffer) {
-                    self.audioBuffers[audioClipIdx] = buffer;
-                });
+                self.audioClips[audioClipIdx].loadingStatus = 1/*loaded compressed*/;
+                self.audioClips[audioClipIdx].compressedAudioBuffer = request.response;
+                //console.log("Loaded clip " + audioClipIdx);
             };
         request.onerror =
             function () {
-                self.audioBuffers[audioClipIdx] = 'error';
+                self.audioClips[audioClipIdx].loadingStatus = 4/*error*/;
             };
+
         try {
             request.send();
-            //Module._AudioService_AudioClip_OnLoading(entity,audioClipIdx);
         } catch (e) {
             // LG Nexus 5 + Android OS 4.4.0 + Google Chrome 30.0.1599.105 browser
             // odd behavior: If loading from base64-encoded data URI and the
             // format is unsupported, request.send() will immediately throw and
             // not raise the failure at .onerror() handler. Therefore catch
             // failures also eagerly from .send() above.
-            self.audioBuffers[audioClipIdx] = 'error';
+            self.audioClips[audioClipIdx].loadingStatus = 4/*error*/;
         }
+#endif
 
         return audioClipIdx;
     },
 
-    /*public enum LoadResult
-    {
-        stillWorking = 0,
-        success = 1,
-        failed = 2
-    };
-    */
     js_html_audioCheckLoad : function (audioClipIdx) {
         var WORKING_ON_IT = 0;
         var SUCCESS = 1;
         var FAILED = 2;
 
-        if (!this.audioContext || audioClipIdx < 0)
-            return FAILED;
-        if (this.audioBuffers[audioClipIdx] == null)
-            return FAILED;
-        if (this.audioBuffers[audioClipIdx] === 'loading')
-            return WORKING_ON_IT; 
-        if (this.audioBuffers[audioClipIdx] === 'error')
-            return FAILED;
+        if (!this.audioContext || (audioClipIdx < 0) || (this.audioClips[audioClipIdx].loadingStatus == 4))
+            return FAILED;        
+        if (this.audioClips[audioClipIdx].loadingStatus == 0/*loading compressed*/)
+            return WORKING_ON_IT;  
+
         return SUCCESS;
     },
 
     js_html_audioFree : function (audioClipIdx) {
-        var audioBuffer = this.audioBuffers[audioClipIdx];
-        if (!audioBuffer)
+        if (!this.audioContext || audioClipIdx < 0)
             return;
 
-        for (var i = 0; i < this.audioSources.length; ++i) {
-            var sourceNode = this.audioSources[i];
-            if (sourceNode && sourceNode.buffer === audioBuffer)
-                sourceNode.stop();
+        var audioClip = this.audioClips[audioClipIdx];
+        if (!audioClip || (audioClip.loadingStatus == 4/*error*/))
+            return;
+
+        // If the audio clip is still being played, then stop it.
+        if (audioClip.refCount > 0) {
+            for (var audioSourceIdx in this.audioSources) {
+                var sourceNode = this.audioSources[audioSourceIdx];
+                if (sourceNode && sourceNode.buffer === audioClip.uncompressedAudioBuffer)
+                    sourceNode.stop();
+            }
         }
 
-        this.audioBuffers[audioClipIdx] = null;
+        if (audioClip.loadingStatus == 3/*uncompressed loaded*/) {
+            var uncompressedAudioBufferSize = audioClip.uncompressedAudioBuffer.length * audioClip.uncompressedAudioBuffer.numberOfChannels * 4;
+            this.uncompressedAudioBufferBytes -= uncompressedAudioBufferSize;
+            audioClip.refCount = 0;
+            audioClip.uncompressedAudioBuffer = null;
+        }
+
+        if (audioClip.compressedAudioBuffer) {
+            audioClip.compressedAudioBuffer = null;
+        }
+
+        delete this.audioClips[audioClipIdx];
     },
+
+    // get audio memory footprint
+    js_html_getRequiredMemoryCompressed : function (audioClipIdx)
+	{
+        if (!this.audioContext || audioClipIdx < 0)
+            return 0;
+
+        var audioClip = this.audioClips[audioClipIdx];
+        if (!audioClip || (audioClip.loadingStatus == 4/*error*/))
+            return 0;
+
+		if (!audioClip.compressedAudioBuffer)
+			return 0;
+
+		return audioClip.compressedAudioBuffer.byteLength;
+	},
+
+    js_html_getRequiredMemoryUncompressed : function (audioClipIdx)
+	{
+        if (!this.audioContext || audioClipIdx < 0)
+            return 0;
+
+        var audioClip = this.audioClips[audioClipIdx];
+        if (!audioClip || (audioClip.loadingStatus == 4/*error*/))
+            return 0;
+
+		if (!audioClip.uncompressedAudioBuffer)
+			return 0;
+
+		return audioClip.uncompressedAudioBuffer.length * audioClip.uncompressedAudioBuffer.numberOfChannels * 4;
+	},
 
     // create audio source node
     js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pitch, pan, loop) 
@@ -246,14 +358,48 @@ mergeInto(LibraryManager.library, {
         if (this.audioContext.state !== 'running')
             return false;
 
-        // require audio buffer to be loaded
-        var srcBuffer = this.audioBuffers[audioClipIdx];
-        if (!srcBuffer || typeof srcBuffer === 'string')
+        var self = this;
+
+        // require compressed audio buffer to be loaded
+        var audioClip = this.audioClips[audioClipIdx];
+        if (!audioClip || (audioClip.loadingStatus == 4/*error*/))
             return false;
+
+        if (audioClip.loadingStatus == 1/*compressed loaded*/) {
+            audioClip.loadingStatus = 2/*decompressing*/;
+
+            //console.log("Decompressing clip " + audioClipIdx);
+
+            // Make a copy of the compressed audio data first. We aren't allowed to reuse the buffer we pass in since it will be handled asynchronously
+            // on a different thread, even though we know we are only reading from it repeatedly.
+            var audioBufferCompressedCopy = audioClip.compressedAudioBuffer.slice(0);
+
+            var decodeStartTime = performance.now();
+            self.audioContext.decodeAudioData(audioBufferCompressedCopy, function (buffer) {
+                //console.log("Decompressed clip " + audioClipIdx);
+
+                audioClip.loadingStatus = 3/*uncompressed loaded*/;
+                audioClip.uncompressedAudioBuffer = buffer;
+                audioClip.refCount = 0;
+                audioClip.lastPlayedTime = self.audioContext.currentTime;
+                self.uncompressedAudioBufferBytes += buffer.length * buffer.numberOfChannels * 4;
+
+                var decodeDurationMsecs = performance.now() - decodeStartTime;
+                var uncompressedSizeBytes = buffer.length * buffer.numberOfChannels * 4/*sizeof(float)*/;
+                if (uncompressedSizeBytes > 50*1024*1024 || decodeDurationMsecs > 250) {
+                    console.warn('Decompression of audio clip ' + self.audioClips[audioClipIdx].url + ' caused a playback delay of ' + decodeDurationMsecs + ' msecs, and resulted in an uncompressed audio buffer size of ' + uncompressedSizeBytes + ' bytes!');
+                }
+            });
+        }
+
+        if (audioClip.loadingStatus != 3)
+            return false;
+
+        //console.log("Playing clip " + audioClipIdx);
 
         // create audio source node
         var sourceNode = this.audioContext.createBufferSource();
-        sourceNode.buffer = srcBuffer;
+        sourceNode.buffer = audioClip.uncompressedAudioBuffer;
         sourceNode.playbackRate.value = pitch;
 
         var panNode = this.audioContext.createPanner();
@@ -261,7 +407,7 @@ mergeInto(LibraryManager.library, {
         sourceNode.panNode = panNode;
 
         var gainNode = this.audioContext.createGain();
-        gainNode.buffer = srcBuffer;
+        gainNode.buffer = audioClip.uncompressedAudioBuffer;
         sourceNode.gainNode = gainNode;
 
         sourceNode.connect(gainNode);
@@ -274,7 +420,7 @@ mergeInto(LibraryManager.library, {
         // loop value
         sourceNode.loop = loop;
 
-        if (this.audioSources[audioSourceIdx] != undefined)
+        if (this.audioSources[audioSourceIdx])
             // stop audio source node if it is already playing
             this.audioSources[audioSourceIdx].stop();
             
@@ -283,37 +429,51 @@ mergeInto(LibraryManager.library, {
         
         // on ended event
         sourceNode.onended = function (event) {
-            sourceNode.stop();
             sourceNode.isPlaying = false;
+
+            sourceNode.gainNode.disconnect();
+            sourceNode.panNode.disconnect();
+            sourceNode.disconnect();
+
+            delete sourceNode.buffer;
+
+             if (self.audioSources[audioSourceIdx] === sourceNode)
+                delete self.audioSources[audioSourceIdx];
+
+            audioClip.refCount--;
+            audioClip.lastPlayedTime = self.audioContext.currentTime;
         };
 
         // play audio source
+        audioClip.lastPlayedTime = self.audioContext.currentTime;
+        if (audioClip.refCount >= 1)
+            audioClip.refCount++;
+        else
+            audioClip.refCount = 1;
+
         sourceNode.start();
         sourceNode.isPlaying = true;
-        //console.log("[Audio] playing " + audioSourceIdx);
+
         return true;
     },
 
     // remove audio source node, optionally stop it 
     js_html_audioStop : function (audioSourceIdx, dostop) {
         if (!this.audioContext || audioSourceIdx < 0)
-            return;
+            return false;
 
         // retrieve audio source node
         var sourceNode = this.audioSources[audioSourceIdx];
         if (!sourceNode)
-            return;
-
-        // forget audio source node
-        sourceNode.onended = null;
-        this.audioSources[audioSourceIdx] = null;
+            return false;
 
         // stop audio source
         if (sourceNode.isPlaying && dostop) {
             sourceNode.stop();
             sourceNode.isPlaying = false;
-            //console.log("[Audio] stopping " + audioSourceIdx);
         }
+
+        return true;
     },
 
     js_html_audioSetVolume : function (audioSourceIdx, volume) {

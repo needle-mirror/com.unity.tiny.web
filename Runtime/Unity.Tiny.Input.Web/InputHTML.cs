@@ -27,6 +27,19 @@ namespace Unity.Tiny.Web
             }
         }
 
+        public override PointerModeType GetMouseMode()
+        {
+            int mouseMode = InputHTMLNativeCalls.JSGetMouseMode();
+            switch (mouseMode)
+            {
+                case 1:
+                    return PointerModeType.Hidden;
+                case 2:
+                    return PointerModeType.Locked;
+            }
+            return PointerModeType.Normal;
+        }
+
         protected override void OnStartRunning()
         {
             base.OnStartRunning();
@@ -76,11 +89,12 @@ namespace Unity.Tiny.Web
             int keyStreamLen;
             unsafe { fixed(int* ptr = streamBuf) { keyStreamLen = InputHTMLNativeCalls.JSGetKeyStream(streamBuf.Length, ptr); }}
 
-            for (int i = 0; i < keyStreamLen; i += 2)
+            for (int i = 0; i < keyStreamLen; i += 3)
             {
                 int action = streamBuf[i];
                 int key = streamBuf[i + 1];
-                int nkeys = TranslateKey(key, translatedKeys);
+                int location = streamBuf[i + 2];
+                int nkeys = TranslateKey(key, location, translatedKeys);
                 for (int j = 0; j < nkeys; j++)
                 {
                     KeyCode translatedKey = translatedKeys[j];
@@ -354,7 +368,12 @@ namespace Unity.Tiny.Web
         private const int DOM_VK_PA1 = 0xFD;
         private const int DOM_VK_WIN_OEM_CLEAR = 0xFE;
 
-        static int TranslateKey(int htmlKeyCode, KeyCode[] results)
+        private const int DOM_KEY_LOCATION_STANDARD = 0x00;
+        private const int DOM_KEY_LOCATION_LEFT = 0x01;
+        private const int DOM_KEY_LOCATION_RIGHT = 0x02;
+        private const int DOM_KEY_LOCATION_NUMPAD = 0x03;
+
+        static int TranslateKey(int htmlKeyCode, int location, KeyCode[] results)
         {
             switch (htmlKeyCode)
             {
@@ -467,18 +486,48 @@ namespace Unity.Tiny.Web
                 case DOM_VK_F12:
                     results[0] = KeyCode.F12; return 1;
                 case DOM_VK_SHIFT:
+                    if (location == DOM_KEY_LOCATION_LEFT) {
+                        results[0] = KeyCode.LeftShift;
+                        return 1;
+                    } else if (location == DOM_KEY_LOCATION_RIGHT) {
+                        results[0] = KeyCode.RightShift;
+                        return 1;
+                    }
                     results[0] = KeyCode.LeftShift;
                     results[1] = KeyCode.RightShift;
                     return 2;
                 case DOM_VK_ALT:
+                    if (location == DOM_KEY_LOCATION_LEFT) {
+                        results[0] = KeyCode.LeftAlt;
+                        return 1;
+                    } else if (location == DOM_KEY_LOCATION_RIGHT) {
+                        results[0] = KeyCode.RightAlt;
+                        return 1;
+                    }
                     results[0] = KeyCode.LeftAlt;
                     results[1] = KeyCode.RightAlt;
                     return 2;
                 case DOM_VK_CONTROL:
+                    if (location == DOM_KEY_LOCATION_LEFT) {
+                        results[0] = KeyCode.LeftControl;
+                        return 1;
+                    } else if (location == DOM_KEY_LOCATION_RIGHT) {
+                        results[0] =KeyCode.RightControl;
+                        return 1;
+                    }
                     results[0] = KeyCode.LeftControl;
                     results[1] = KeyCode.RightControl;
                     return 2;
                 case DOM_VK_WIN:
+                    if (location == DOM_KEY_LOCATION_LEFT) {
+                        results[0] = KeyCode.LeftWindows;
+                        results[1] = KeyCode.LeftCommand;
+                        return 2;
+                    } else if (location == DOM_KEY_LOCATION_RIGHT) {
+                        results[0] = KeyCode.RightWindows;
+                        results[1] = KeyCode.RightCommand;
+                        return 2;
+                    }
                     results[0] = KeyCode.LeftWindows;
                     results[1] = KeyCode.RightWindows;
                     results[2] = KeyCode.LeftCommand;
@@ -501,6 +550,9 @@ namespace Unity.Tiny.Web
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputSetMouseMode")]
         public static extern void JSSetMouseMode(int mode);
+
+        [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetMouseMode")]
+        public static extern unsafe int JSGetMouseMode();
 
         [DllImport("lib_unity_tiny_input_web", EntryPoint = "js_inputGetKeyStream")]
         public static extern unsafe int JSGetKeyStream(int maxLen, int* dest);

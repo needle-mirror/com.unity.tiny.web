@@ -24,7 +24,7 @@ mergeInto(LibraryManager.library, {
 
   js_html_getDPIScale__proxy : 'sync',
   js_html_getDPIScale : function () {
-    return window.devicePixelRatio;
+    return window.devicePixelRatio || 1;
   },
 
   js_html_getScreenSize__proxy : 'sync',
@@ -42,8 +42,9 @@ mergeInto(LibraryManager.library, {
   js_html_getCanvasSize__proxy : 'sync',
   js_html_getCanvasSize : function (wPtr, hPtr) {
     var html = ut._HTML;
-    HEAP32[wPtr>>2] = html.canvasElement.width | 0;
-    HEAP32[hPtr>>2] = html.canvasElement.height | 0;
+    var bounds = html.canvasElement.getBoundingClientRect();
+    HEAP32[wPtr>>2] = bounds.width;
+    HEAP32[hPtr>>2] = bounds.height;
   },
 
   js_html_validateWebGLContextFeatures__proxy: 'sync',
@@ -124,5 +125,5 @@ mergeInto(LibraryManager.library, {
     var buffer = _malloc(bufferSize);
     stringToUTF8(res, buffer, bufferSize);
     return buffer;
-  },
+  }
 });

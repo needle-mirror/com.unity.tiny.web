@@ -31,10 +31,10 @@ mergeInto(LibraryManager.library, {
             return l;
         };
    
-        inp.updateCursor = function() {
+        inp.updateCursor = function(fromMouseEvent) {
             if (ut.inpActiveMouseMode == ut.inpSavedMouseMode)
                 return;
-            
+        
             var canvas = ut._HTML.canvasElement;
             var hasPointerLock = (document.pointerLockElement === canvas ||
                 document.mozPointerLockElement === canvas);
@@ -54,16 +54,23 @@ mergeInto(LibraryManager.library, {
                 ut.inpActiveMouseMode = 1;
             }
             else {
-                // locked + hidden
-                canvas.requestPointerLock();
+                if (!hasPointerLock && fromMouseEvent) {
+                    // locked + hidden
+                    canvas.requestPointerLock();
+                }
                 
                 // ut.inpActiveMouseMode won't change until (and if) locking is successful
             }
         };
    
         inp.mouseEventFn = function(ev) {
-            if (ut.inpSavedMouseMode != ut.inpActiveMouseMode)
-                return;
+            // Try restoring the cursor lock on mouse down, if it's stil required.
+            // Browsers may drop the lock on ESC, minimize, task switch, etc.
+            if (ut.inpSavedMouseMode != ut.inpActiveMouseMode && ev.type == "mousedown") {
+                ut._HTML.input.updateCursor(true);
+            }
+
+            TinyEventManager.dispatchEvent(ev);
 
             var inp = ut._HTML.input;
             var eventType;
@@ -121,6 +128,7 @@ mergeInto(LibraryManager.library, {
         }();
 
         inp.wheelEventFn = function(ev) {
+            TinyEventManager.dispatchEvent(ev);
             var dx = ev.deltaX;
             var dy = ev.deltaY;
             if (dx) {
@@ -140,6 +148,7 @@ mergeInto(LibraryManager.library, {
         };
         
         inp.touchEventFn = function(ev) {
+            TinyEventManager.dispatchEvent(ev);
             var inp = ut._HTML.input;
             var eventType, x, y, touch, touches = ev.changedTouches;
             var buttons = 0;
@@ -162,12 +171,14 @@ mergeInto(LibraryManager.library, {
         };       
 
         inp.keyEventFn = function(ev) {
+            TinyEventManager.dispatchEvent(ev);
             var eventType;
             if (ev.type == "keydown") eventType = 1;
             else if (ev.type == "keyup") eventType = 0;
             else return;
             inp.keyStream.push(eventType|0);
             inp.keyStream.push(ev.keyCode|0);
+            inp.keyStream.push(ev.location|0);
         };        
 
         inp.clickEventFn = function() {
@@ -256,8 +267,13 @@ mergeInto(LibraryManager.library, {
         ut.inpActiveMouseMode = ut.inpActiveMouseMode || 0;
         ut.inpSavedMouseMode = mode;
 
-        if (ut && ut._HTML && ut._HTML.input && ut._HTML.input.focusLost)
+        if (ut && ut._HTML && ut._HTML.input)
             ut._HTML.input.updateCursor();
+    },
+
+    js_inputGetMouseMode__proxy : 'sync',
+    js_inputGetMouseMode : function () {
+        return ut.inpActiveMouseMode || 0;
     },
     
     js_inputGetKeyStream__proxy : 'sync',

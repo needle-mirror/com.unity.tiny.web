@@ -114,13 +114,19 @@ namespace Unity.Tiny.Web
 
             if (di.autoSizeToFrame)
             {
-                di.width = di.frameWidth;
-                di.height = di.frameHeight;
+                di.width = (int)(di.frameWidth * di.screenDpiScale);
+                di.height = (int)(di.frameHeight * di.screenDpiScale);
+                wCanvas = di.frameWidth;
+                hCanvas = di.frameHeight;
+            } 
+            else if (firstTime)
+            {
+                di.width = (int)(di.width * di.screenDpiScale);
+                di.height = (int)(di.height * di.screenDpiScale);
             }
 
-            // TODO DOTSR-994 -- the framebufferWidth/Height should be directly configurable
-            di.framebufferWidth = (int)(di.width * di.screenDpiScale);
-            di.framebufferHeight = (int)(di.height * di.screenDpiScale);
+            di.framebufferWidth = di.width;
+            di.framebufferHeight = di.height;
 
             unsafe
             {
@@ -128,9 +134,9 @@ namespace Unity.Tiny.Web
                 {
                     // Only do this if it's the first time, or if the struct values actually changed from the last time we set it
 #if DEBUG
-                    Debug.Log($"setCanvasSize {di.width}px {di.height}px (backing {di.framebufferWidth} {di.framebufferHeight}, dpi scale {di.screenDpiScale})");
+                    Debug.Log($"setCanvasSize {firstTime} {wCanvas}px {hCanvas}px (backing {di.framebufferWidth} {di.framebufferHeight}, dpi scale {di.screenDpiScale})");
 #endif
-                    HTMLNativeCalls.setCanvasSize(di.width, di.height, di.framebufferWidth, di.framebufferHeight);
+                    HTMLNativeCalls.setCanvasSize(wCanvas, hCanvas, di.framebufferWidth, di.framebufferHeight);
                     env.SetConfigData(di);
                     lastDisplayInfo = di;
                 }

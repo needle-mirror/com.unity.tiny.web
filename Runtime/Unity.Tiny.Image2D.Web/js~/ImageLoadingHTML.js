@@ -82,6 +82,26 @@ mergeInto(LibraryManager.library, {
         return cvs;
       }
     };
+    
+    ut._HTML.loadImage = function(idx, image, isMask) {
+        var img = new Image();
+        if(isMask)
+            ut._HTML.images[idx].mask = img;
+        else
+            ut._HTML.images[idx].image = img;
+        ut._HTML.images[idx].hasAlpha = true; // if we support jpeg this should be false
+        img.onerror = function() {
+          if(!isMask)
+          {
+            //Failed to load with the Image API, maybe it is a webp image, let's try to decode it first (:Safari case)
+            if(!ut._HTML.loadWebPFallback(image, idx))
+                ut._HTML.images[idx].loaderror = true;
+          }
+          else
+            ut._HTML.images[idx].loaderror = true;
+        };
+        img.src = image;
+    }
 
     ut._HTML.loadWebPFallback = function(url, idx) {
       function decode_base64(base64) {
@@ -97,53 +117,69 @@ mergeInto(LibraryManager.library, {
         }
         return data;
       }
-      if(!url)
-        return false;
+        
       if (!(typeof WebPDecoder == "object"))
         return false; // no webp fallback installed, let it fail on it's own
-      if (WebPDecoder.nativeSupport)
-        return false; // regular loading
+
       var webpCanvas;
       var webpPrefix = "data:image/webp;base64,";
       if (!url.lastIndexOf(webpPrefix, 0)) { // data url 
         webpCanvas = document.createElement("canvas");
         WebPDecoder.decode(decode_base64(url.substring(webpPrefix.length)), webpCanvas);
-        webpCanvas.naturalWidth = webpCanvas.width;
-        webpCanvas.naturalHeight = webpCanvas.height;
-        webpCanvas.complete = true;
         ut._HTML.initImage(idx);
         ut._HTML.images[idx].image = webpCanvas;
         return true;
       }
-      if (url.lastIndexOf("data:image/", 0) && url.match(/\.webp$/i)) {
-        webpCanvas = document.createElement("canvas");
-        webpCanvas.naturalWidth = 0;
-        webpCanvas.naturalHeight = 0;
-        webpCanvas.complete = false;
-        ut._HTML.initImage(idx);
-        ut._HTML.images[idx].image = webpCanvas;
-        var webpRequest = new XMLHttpRequest();
-        webpRequest.responseType = "arraybuffer";
-        webpRequest.open("GET", url);
-        webpRequest.onerror = function () {
-          ut._HTML.images[idx].loaderror = true;
-        };
-        webpRequest.onload = function () {
-          WebPDecoder.decode(new Uint8Array(webpRequest.response), webpCanvas);
-          webpCanvas.naturalWidth = webpCanvas.width;
-          webpCanvas.naturalHeight = webpCanvas.height;
-          webpCanvas.complete = true;
-        };
-        webpRequest.send();
-        return true;
-      }
-      return false; 
-    };
 
+      webpCanvas = document.createElement("canvas");
+      webpCanvas.naturalWidth = 0;
+      webpCanvas.naturalHeight = 0;
+      webpCanvas.complete = false;
+      ut._HTML.initImage(idx);
+      ut._HTML.images[idx].image = webpCanvas;
+      var webpRequest = new XMLHttpRequest();
+      webpRequest.responseType = "arraybuffer";
+      webpRequest.open("GET", url);
+      webpRequest.onerror = function () {
+        ut._HTML.images[idx].loaderror = true;
+      };
+      webpRequest.onload = function () {
+        WebPDecoder.decode(new Uint8Array(webpRequest.response), webpCanvas);
+     };
+      webpRequest.send();
+      return true;
+    };
   },
+
+#if SINGLE_FILE
+  // hepler object and function used in js_html_loadImage() when generating single file builds
+
+  $base64ImageFormatHeaders: {
+    "i": "png",
+    "/": "jpeg",
+    "U": "webp",
+    "Q": "bmp",
+    "R": "gif",
+  },
+
+  $getImageDataUrl__deps: ['$base64ImageFormatHeaders'],
+  $getImageDataUrl: function (url) {
+    var asset = SINGLE_FILE_ASSETS[url];
+    if (!asset)
+      return url;
+    var format = base64ImageFormatHeaders[asset.charAt(0)];
+    if (!format)
+      return url;
+    return "data:image/" + format + ";base64," + asset;
+  },
+
+#endif
 
   // start loading image 
   js_html_loadImage__proxy : 'sync',
+#if SINGLE_FILE
+  js_html_loadImage__deps: ['$getImageDataUrl'],
+#endif
   js_html_loadImage : function(colorName, maskName) {
     colorName = colorName ? UTF8ToString(colorName) : null;
     maskName = maskName ? UTF8ToString(maskName) : null;
@@ -157,6 +193,10 @@ mergeInto(LibraryManager.library, {
     if (maskName && maskName.substring(0, 9) == "ut-asset:") {
       maskName = UT_ASSETS[maskName.substring(9)];
     }
+#if SINGLE_FILE
+    colorName = getImageDataUrl(colorName);
+    maskName = getImageDataUrl(maskName);
+#endif
 
     // grab first free index
     var idx;
@@ -168,26 +208,13 @@ mergeInto(LibraryManager.library, {
     }
     ut._HTML.initImage(idx);
 
-    // webp fallback if needed (extra special case)
-    if (ut._HTML.loadWebPFallback(colorName, idx) )
-      return idx;
-
     // start actual load
     if (colorName) {
-      var imgColor = new Image();
-      var isjpg = !!colorName.match(/\.jpe?g$/i);
-      ut._HTML.images[idx].image = imgColor;
-      ut._HTML.images[idx].hasAlpha = !isjpg;
-      imgColor.onerror = function() { ut._HTML.images[idx].loaderror = true; };
-      imgColor.src = colorName;
+      ut._HTML.loadImage(idx, colorName, false);
     }
 
     if (maskName) {
-      var imgMask = new Image();
-      ut._HTML.images[idx].mask = imgMask;
-      ut._HTML.images[idx].hasAlpha = true;
-      imgMask.onerror = function() { ut._HTML.images[idx].loaderror = true; };
-      imgMask.src = maskName;
+      ut._HTML.loadImage(idx, maskName, true);
     }
 
     return idx; 
@@ -213,6 +240,15 @@ mergeInto(LibraryManager.library, {
     }
 
     return 1; // ok
+  },
+
+  js_html_getImageInfo__proxy : 'sync',
+  js_html_getImageInfo : function(idx, wPtr, hPtr) {
+    var img = ut._HTML.images[idx];
+    if (img.image) {
+      HEAP32[wPtr>>2] = img.image.naturalWidth;
+      HEAP32[hPtr>>2] = img.image.naturalHeight;    // check three combinations of mask and image
+	}
   },
 
   js_html_finishLoadImage__proxy : 'sync',

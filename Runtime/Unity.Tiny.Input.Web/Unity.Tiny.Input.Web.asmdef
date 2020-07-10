@@ -18,7 +18,7 @@
     "precompiledReferences": [],
     "autoReferenced": true,
     "defineConstraints": [
-        "UNITY_DOTSPLAYER"
+        "UNITY_DOTSRUNTIME"
     ],
     "versionDefines": [],
     "noEngineReferences": true

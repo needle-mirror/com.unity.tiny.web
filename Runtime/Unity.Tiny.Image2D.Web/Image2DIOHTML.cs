@@ -5,6 +5,9 @@ using Unity.Entities;
 using Unity.Collections.LowLevel.Unsafe;
 using Unity.Collections;
 using Unity.Tiny.GenericAssetLoading;
+#if ENABLE_DOTSPLAYER_PROFILER
+using Unity.Development.Profiling;
+#endif
 
 /**
  * @module
@@ -37,6 +40,9 @@ namespace Unity.Tiny.Web
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_finishLoadImage")]
         public static extern void JSFinishLoadImage(int idx, ref int w, ref int h, ref int hasAlpha);
+
+        [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_getImageInfo")]
+        public static extern void JSGetImageInfo(int idx, ref int w, ref int h);
 
         [DllImport("lib_unity_tiny_image2d_web", EntryPoint = "js_html_freeImage")]
         public static extern void JSFreeImage(int idx);
@@ -124,11 +130,22 @@ namespace Unity.Tiny.Web
             image.imagePixelWidth = wi;
             image.status = ImageStatus.Loaded;
             imgHTML.externalOwner = false;
-#if DEBUG
+#if IO_ENABLE_TRACE
             var s = $"Loaded image: {fnLog} size: {wi}, {hi} ";
             if (ai != 0) s += " (has alpha channel)";
             s += $" idx: {imgHTML.imageIndex}";
             Debug.Log(s);
+#endif
+#if ENABLE_DOTSPLAYER_PROFILER
+            ProfilerStats.AccumStats.memTextureCount.Accumulate(1);
+            long bytes = image.imagePixelWidth * image.imagePixelHeight * 4;
+            ProfilerStats.AccumStats.memTexture.Accumulate(bytes);
+            ProfilerStats.AccumStats.memReservedGFX.Accumulate(bytes);
+            ProfilerStats.AccumStats.memUsedGFX.Accumulate(bytes);
+
+            // WebGL image loading doesn't use our unsafeutility heap allocator so we need to track our own stats
+            ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
+            ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
 #endif
 
             return LoadResult.success;
@@ -137,7 +154,28 @@ namespace Unity.Tiny.Web
         public void FreeNative(EntityManager man, Entity e, ref Image2DHTML imgHTML)
         {
             if (!imgHTML.externalOwner && imgHTML.imageIndex > 0)
+            {
                 ImageIOHTMLNativeCalls.JSFreeImage(imgHTML.imageIndex);
+#if ENABLE_DOTSPLAYER_PROFILER
+                int w = 0, h = 0;
+                unsafe
+                {
+                    ImageIOHTMLNativeCalls.JSGetImageInfo(imgHTML.imageIndex, ref w, ref h);
+                }
+                if (w != 0 && h != 0)
+                {
+                    ProfilerStats.AccumStats.memTextureCount.Accumulate(-1);
+                    long bytes = -w * h * 4;
+                    ProfilerStats.AccumStats.memTexture.Accumulate(bytes);
+                    ProfilerStats.AccumStats.memReservedGFX.Accumulate(bytes);
+                    ProfilerStats.AccumStats.memUsedGFX.Accumulate(bytes);
+
+                    // WebGL image loading doesn't use our unsafeutility heap allocator so we need to track our own stats
+                    ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
+                    ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
+                }
+#endif
+            }
             if (imgHTML.imageIndex > 0)
             {
                 var s = "Free HTML image at ";

@@ -8,7 +8,7 @@ namespace Unity.Tiny.Web
 {
     public struct NativeMessage : IComponentData
     {
-        public NativeString512 message;
+        public FixedString512 message;
     }
 
     public struct NativeMessageInt : IBufferElementData
@@ -58,7 +58,7 @@ namespace Unity.Tiny.Web
             {
                 var messageEntity = entityCommandBuffer.CreateEntity();
 
-                entityCommandBuffer.AddComponent(messageEntity, new NativeMessage { message = new NativeString512(message) });
+                entityCommandBuffer.AddComponent(messageEntity, new NativeMessage { message = new FixedString512(message) });
 
                 var messageIntBuffer = entityCommandBuffer.AddBuffer<NativeMessageInt>(messageEntity);
                 CopyArrayToBuffer(messageIntBuffer, intArray, intArrayLength, sizeof(int));
