@@ -80,12 +80,6 @@ namespace Unity.Tiny.Web
                 return;
 
             UpdateDisplayInfo(firstTime: false);
-
-            var env = World.TinyEnvironment();
-            double newFrameTime = HTMLNativeCalls.time();
-            var timeData = env.StepWallRealtimeFrame(newFrameTime - frameTime);
-            World.SetTime(timeData);
-            frameTime = newFrameTime;
         }
 
         private void UpdateDisplayInfo(bool firstTime)
@@ -145,7 +139,6 @@ namespace Unity.Tiny.Web
 
         protected DisplayInfo lastDisplayInfo;
         protected bool initialized;
-        protected double frameTime;
     }
 
     static class HTMLNativeCalls
@@ -157,9 +150,6 @@ namespace Unity.Tiny.Web
 
         [DllImport("lib_unity_tiny_web", EntryPoint = "shutdown_html")]
         public static extern void shutdown(int exitCode);
-
-        [DllImport("lib_unity_tiny_web", EntryPoint = "time_html")]
-        public static extern double time();
 
         // calls to HTMLWrapper.js directly
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_setCanvasSize")]

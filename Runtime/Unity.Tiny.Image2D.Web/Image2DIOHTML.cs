@@ -8,6 +8,7 @@ using Unity.Tiny.GenericAssetLoading;
 #if ENABLE_DOTSPLAYER_PROFILER
 using Unity.Development.Profiling;
 #endif
+using Hash128 = Unity.Entities.Hash128;
 
 /**
  * @module
@@ -84,10 +85,10 @@ namespace Unity.Tiny.Web
             {
                 var guids = man.GetComponentData<Image2DLoadFromFileGuids>(e);
                 // TODO -- call an asset service to actually get some kind of stream from a guid
-                if (!guids.imageAsset.Equals(Guid.Empty))
-                    fnImage = "Data/" + guids.imageAsset.ToString("N");
-                if (!guids.maskAsset.Equals(Guid.Empty))
-                    fnMask = "Data/" + guids.maskAsset.ToString("N");
+                if (guids.imageAsset.IsValid)
+                    fnImage = "Data/" + guids.imageAsset.ToString();
+                if (guids.maskAsset.IsValid)
+                    fnMask = "Data/" + guids.maskAsset.ToString();
             }
             else
             {
@@ -118,7 +119,7 @@ namespace Unity.Tiny.Web
                 image.imagePixelHeight = 0;
                 image.imagePixelWidth = 0;
                 FreeNative(man, e, ref imgHTML);
-                Console.WriteLine("Failed to load " + fnLog);
+                Debug.Log("Failed to load " + fnLog);
                 return LoadResult.failed;
             }
 

@@ -12,6 +12,6 @@ class CustomizerForImage2DWeb : AsmDefCSharpProgramCustomizer
     public override void CustomizeSelf(AsmDefCSharpProgram program)
     {
         NiceIO.NPath path = program.MainSourcePath.Combine("external/libwebp.js");
-        program.NativeProgram.Libraries.Add(c => ((DotsRuntimeNativeProgramConfiguration)c).CSharpConfig.PlatformBuildConfig is WebBuildConfig webBuildConfig && webBuildConfig.ExportWebPFallback, new PostJsLibrary(path));
+        program.NativeProgram.Libraries.Add(c => ((DotsRuntimeNativeProgramConfiguration)c).CSharpConfig.PlatformBuildConfig is WebBuildConfig, new PostJsLibrary(path));
     }
 }

@@ -1,5 +1,7 @@
 mergeInto(LibraryManager.library, {
 
+    js_html_initAudio__sig: 'i',
+    js_html_initAudio__proxy: 'sync',
     js_html_initAudio : function() {
         
         ut = ut || {};
@@ -128,11 +130,15 @@ mergeInto(LibraryManager.library, {
         return true;
     },
 
+    js_html_audioIsUnlocked__proxy: 'sync',
+    js_html_audioIsUnlocked__sig: 'i',
     js_html_audioIsUnlocked : function() {
         return this.unlockState == 2/*unlocked*/;
     },
 
     // unlock audio for browsers
+    js_html_audioUnlock__proxy: 'async',
+    js_html_audioUnlock__sig: 'v',
     js_html_audioUnlock : function () {
         var self = this;
         if (self.unlockState >= 1/*unlocking or unlocked*/ || !self.audioContext ||
@@ -151,6 +157,8 @@ mergeInto(LibraryManager.library, {
     },
 
     // pause audio context
+    js_html_audioPause__proxy: 'async',
+    js_html_audioPause__sig: 'v',
     js_html_audioPause : function () {
         if (this.audioContext && this.audioContext.suspend) {
             this.audioContext.suspend();
@@ -158,12 +166,16 @@ mergeInto(LibraryManager.library, {
     },
 
     // resume audio context
+    js_html_audioResume__proxy: 'async',
+    js_html_audioResume__sig: 'v',
     js_html_audioResume : function () {
         if (this.audioContext && this.audioContext.resume) {
             this.audioContext.resume();
         }
     },
 
+    js_html_audioUpdate__proxy: 'sync',
+    js_html_audioUpdate__sig: 'v',
     js_html_audioUpdate : function() {
         // To truly implement least-recently played, we would walk the list of sounds once for each sound we unload. Instead, to be more
         // efficient CPU-wise, we will just walk the list twice. 
@@ -215,6 +227,8 @@ mergeInto(LibraryManager.library, {
     },
 
     // load audio clip
+    js_html_audioStartLoadFile__proxy: 'sync',
+    js_html_audioStartLoadFile__sig: 'iii',
     js_html_audioStartLoadFile : function (audioClipName, audioClipIdx) 
     {
         if (!this.audioContext || audioClipIdx < 0)
@@ -274,6 +288,8 @@ mergeInto(LibraryManager.library, {
         return audioClipIdx;
     },
 
+    js_html_audioCheckLoad__proxy: 'sync',
+    js_html_audioCheckLoad__sig: 'vi',
     js_html_audioCheckLoad : function (audioClipIdx) {
         var WORKING_ON_IT = 0;
         var SUCCESS = 1;
@@ -287,6 +303,8 @@ mergeInto(LibraryManager.library, {
         return SUCCESS;
     },
 
+    js_html_audioFree__proxy: 'sync',
+    js_html_audioFree__sig: 'vi',
     js_html_audioFree : function (audioClipIdx) {
         if (!this.audioContext || audioClipIdx < 0)
             return;
@@ -350,6 +368,8 @@ mergeInto(LibraryManager.library, {
 	},
 
     // create audio source node
+    js_html_audioPlay__proxy: 'sync',
+    js_html_audioPlay__sig: 'iiiiiii',
     js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pitch, pan, loop) 
     {
         if (!this.audioContext || audioClipIdx < 0 || audioSourceIdx < 0)
@@ -458,6 +478,8 @@ mergeInto(LibraryManager.library, {
     },
 
     // remove audio source node, optionally stop it 
+    js_html_audioStop__proxy: 'sync',
+    js_html_audioStop__sig: 'vii',
     js_html_audioStop : function (audioSourceIdx, dostop) {
         if (!this.audioContext || audioSourceIdx < 0)
             return false;
@@ -476,6 +498,8 @@ mergeInto(LibraryManager.library, {
         return true;
     },
 
+    js_html_audioSetVolume__proxy: 'sync',
+    js_html_audioSetVolume__sig: 'iii',
     js_html_audioSetVolume : function (audioSourceIdx, volume) {
         if (!this.audioContext || audioSourceIdx < 0)
             return false;
@@ -489,6 +513,8 @@ mergeInto(LibraryManager.library, {
         return true;
     },
     
+    js_html_audioSetPan__proxy: 'sync',
+    js_html_audioSetPan__sig: 'iii',
     js_html_audioSetPan : function (audioSourceIdx, pan) {
         if (!this.audioContext || audioSourceIdx < 0)
             return false;
@@ -502,6 +528,8 @@ mergeInto(LibraryManager.library, {
         return true;
     },
 
+    js_html_audioSetPitch__proxy: 'sync',
+    js_html_audioSetPitch__sig: 'iii',
     js_html_audioSetPitch : function (audioSourceIdx, pitch) {
         if (!this.audioContext || audioSourceIdx < 0)
             return false;
@@ -515,6 +543,8 @@ mergeInto(LibraryManager.library, {
         return true;
     },
 
+    js_html_audioIsPlaying__proxy: 'sync',
+    js_html_audioIsPlaying__sig: 'ii',
     js_html_audioIsPlaying : function (audioSourceIdx) {
         if (!this.audioContext || audioSourceIdx < 0)
             return false;

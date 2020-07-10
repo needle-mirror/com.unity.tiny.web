@@ -1,6 +1,7 @@
 mergeInto(LibraryManager.library, {
 
   js_html_initImageLoading__proxy : 'sync',
+  js_html_initImageLoading__sig: 'v',
   js_html_initImageLoading : function() {
     ut = ut || {};
     ut._HTML = ut._HTML || {};
@@ -117,6 +118,9 @@ mergeInto(LibraryManager.library, {
         }
         return data;
       }
+       
+      if(!document.createElement("canvas").toDataURL("image/webp").lastIndexOf("data:image/webp",0))
+        return false; // webp is natively supported by the browser
         
       if (!(typeof WebPDecoder == "object"))
         return false; // no webp fallback installed, let it fail on it's own
@@ -180,6 +184,7 @@ mergeInto(LibraryManager.library, {
 #if SINGLE_FILE
   js_html_loadImage__deps: ['$getImageDataUrl'],
 #endif
+  js_html_loadImage__sig : 'iii',
   js_html_loadImage : function(colorName, maskName) {
     colorName = colorName ? UTF8ToString(colorName) : null;
     maskName = maskName ? UTF8ToString(maskName) : null;
@@ -222,6 +227,7 @@ mergeInto(LibraryManager.library, {
 
   // check loaded
   js_html_checkLoadImage__proxy : 'sync',
+  js_html_checkLoadImage__sig : 'ii',
   js_html_checkLoadImage : function(idx) {
     var img = ut._HTML.images[idx];
 
@@ -252,6 +258,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_finishLoadImage__proxy : 'sync',
+  js_html_finishLoadImage__sig : 'viiii',
   js_html_finishLoadImage : function(idx, wPtr, hPtr, alphaPtr) {
     var img = ut._HTML.images[idx];
     // check three combinations of mask and image
@@ -323,11 +330,13 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_freeImage__proxy : 'async',
+  js_html_freeImage__sig : 'v',
   js_html_freeImage : function (idx) {
     ut._HTML.images[idx] = null;
   },
 
   js_html_extractAlphaFromImage__proxy : 'sync',
+  js_html_extractAlphaFromImage__sig : 'viiii',
   js_html_extractAlphaFromImage : function (idx, destPtr, w, h) {
     var cvs = document.createElement('canvas');
     cvs.width = w;
@@ -343,6 +352,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_imageToDataURI__proxy : 'sync',
+  js_html_imageToDataURI__sig : 'iiii',
   js_html_imageToDataURI : function (idx, w, h) {
     var cvs = ut._HTML.readyCanvasForReadback(idx,w,h);
     if (!cvs)
@@ -354,6 +364,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_imagePostRequestStatus__proxy : 'sync',
+  js_html_imagePostRequestStatus__sig : 'ii',
   js_html_imagePostRequestStatus : function (idx) {
     if (idx<=0 || idx>=ut._HTML.postingImages)
       return 0; // failed
@@ -364,6 +375,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_imagePostRequest__proxy : 'sync',
+  js_html_imagePostRequest__sig : 'iiiii',
   js_html_imagePostRequest : function (idx, w, h, uri) {
     var cvs = ut._HTML.readyCanvasForReadback(idx,w,h);
     if (!cvs)
@@ -400,6 +412,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_imageToMemory__proxy : 'sync',
+  js_html_imageToMemory__sig : 'iiiii',
   js_html_imageToMemory : function (idx, w, h, dest) {
     // TODO: there could be a fast(ish) path for webgl to get gl to directly write to
     // dest when reading from render targets
@@ -413,6 +426,7 @@ mergeInto(LibraryManager.library, {
   },
 
   js_html_imageFromMemory__proxy : 'sync',
+  js_html_imageFromMemory__sig : 'iiiii',
   js_html_imageFromMemory : function (idx, w, h, src) {
     // this should update existing images ...
     if (idx <= 0 || !ut._HTML.images[idx]) {

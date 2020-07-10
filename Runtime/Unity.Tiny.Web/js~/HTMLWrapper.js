@@ -125,5 +125,19 @@ mergeInto(LibraryManager.library, {
     var buffer = _malloc(bufferSize);
     stringToUTF8(res, buffer, bufferSize);
     return buffer;
+  },
+
+  js_html_displayWaitForManagedDebugger__proxy : 'sync',
+  js_html_displayWaitForManagedDebugger : function(message) {
+    document.getElementById("waitForManagedDebuggerMessage").innerText = UTF8ToString(message);
+    document.getElementById("waitForManagedDebugger").style.display = "block";
+  },
+
+  js_html_StillWaitingForManagedDebugger__proxy : 'sync',
+  js_html_StillWaitingForManagedDebugger : function() {
+    if (document.getElementById("waitForManagedDebugger").style.display == "block") {
+      return true;
+    }
+    return false;
   }
 });
