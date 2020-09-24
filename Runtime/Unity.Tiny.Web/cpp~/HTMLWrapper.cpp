@@ -8,21 +8,48 @@
 #include "gc/GarbageCollector.h"
 
 extern "C" {
-    void js_html_init();
+    // Looking for js_html_init() ? It's moved to ZeroJobs so it can be initialized by the test runner.
     bool js_html_setCanvasSize(int width, int height, bool webgl);
     void js_html_debugReadback(int w, int h, void *pixels);
 }
 
+// C# delegates
+static void (*pausef)(int) = 0;
+static void (*destroyf)() = 0;
+
 DOTS_EXPORT(bool)
-init_html()
-{
-    js_html_init();
+pausecallbackinit_html(void (*func)(int)) {
+    if (pausef)
+        return false;
+    pausef = func;
+    return true;
+}
+
+DOTS_EXPORT(bool)
+destroycallbackinit_html(void (*func)()) {
+    if (destroyf)
+        return false;
+    destroyf = func;
     return true;
 }
 
 DOTS_EXPORT(void)
 shutdown_html(int exitCode)
 {
+}
+
+DOTS_EXPORT(void)
+ondestroyapp()
+{
+    if (destroyf)
+        destroyf();
+}
+
+DOTS_EXPORT(void)
+onpauseapp(int paused)
+{
+    if (pausef)
+        pausef(paused);
 }
 
 DOTS_EXPORT(double)

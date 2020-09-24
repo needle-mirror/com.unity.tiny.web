@@ -4,7 +4,8 @@
         "Unity.Collections",
         "Unity.Entities",
         "Unity.Mathematics",
-        "Unity.Tiny.Core"
+        "Unity.Tiny.Core",
+        "Unity.Platforms.Common"
     ],
     "includePlatforms": [
         "Editor",

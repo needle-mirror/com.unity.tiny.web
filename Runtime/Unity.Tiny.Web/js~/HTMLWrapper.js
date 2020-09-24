@@ -10,18 +10,6 @@ mergeInto(LibraryManager.library, {
     }
   },
 
-  // Create a variable 'ut' in global scope so that Closure sees it.
-  js_html_init__postset : 'var ut;',
-  js_html_init__proxy : 'async',
-  js_html_init : function() {
-    ut = ut || {};
-    ut._HTML = ut._HTML || {};
-
-    var html = ut._HTML;
-    html.visible = true;
-    html.focused = true;
-  },
-
   js_html_getDPIScale__proxy : 'sync',
   js_html_getDPIScale : function () {
     return window.devicePixelRatio || 1;
@@ -98,12 +86,34 @@ mergeInto(LibraryManager.library, {
     }
 
     if (!window.tiny_initialized) {
-      window.addEventListener("focus", function (event) { ut._HTML.focus = true; });
-      window.addEventListener("blur", function (event) { ut._HTML.focus = false; });
+      window.addEventListener("focus", function (event) {
+        ut._HTML.focus = true;
+      });
+      window.addEventListener("blur", function (event) {
+        ut._HTML.focus = false;
+      });
+      window.addEventListener("beforeunload", function (event) { 
+        _ondestroyapp();
+        
+        // Guarantees the browser unload will happen as expected
+        delete event['returnValue']; 
+      });
+      document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible')
+          _onpauseapp(0);
+        else if (document.visibilityState !== 'visible')
+          _onpauseapp(1);
+      });
+
       window.tiny_initialized = true;
     }
 
     return true;
+  },
+
+  js_html_getHasFocus__proxy: 'sync',
+  js_html_getHasFocus : function () {
+    return ut._HTML.focus;
   },
 
   js_html_debugReadback__proxy : 'sync',

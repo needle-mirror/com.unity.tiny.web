@@ -5,29 +5,30 @@ using System.Runtime.InteropServices;
 using Unity.Mathematics;
 using Unity.Collections;
 using Unity.Collections.LowLevel.Unsafe;
+using Unity.Platforms;
 
 namespace Unity.Tiny.Web
 {
     [UpdateInGroup(typeof(InitializationSystemGroup))]
     public class HTMLWindowSystem : WindowSystem
     {
+        private static HTMLWindowSystem sWindowSystem;
         public HTMLWindowSystem()
         {
-            initialized = false;
+            sWindowSystem = this;
         }
 
         public override void DebugReadbackImage(out int w, out int h, out NativeArray<byte> pixels)
         {
-            var env = World.TinyEnvironment();
-            var config = env.GetConfigData<DisplayInfo>();
-            pixels = new NativeArray<byte>(config.framebufferWidth * config.framebufferHeight * 4, Allocator.Persistent);
+            var displayInfo = GetSingleton<DisplayInfo>();
+            pixels = new NativeArray<byte>(displayInfo.framebufferWidth * displayInfo.framebufferHeight * 4, Allocator.Persistent);
             unsafe
             {
-                HTMLNativeCalls.debugReadback(config.framebufferWidth, config.framebufferHeight, pixels.GetUnsafePtr());
+                HTMLNativeCalls.debugReadback(displayInfo.framebufferWidth, displayInfo.framebufferHeight, pixels.GetUnsafePtr());
             }
 
-            w = config.framebufferWidth;
-            h = config.framebufferHeight;
+            w = displayInfo.framebufferWidth;
+            h = displayInfo.framebufferHeight;
         }
 
         IntPtr m_PlatformCanvasName;
@@ -40,29 +41,44 @@ namespace Unity.Tiny.Web
             return m_PlatformCanvasName;
         }
 
+        internal class MonoPInvokeCallbackAttribute : Attribute
+        {
+        }
+
+        [MonoPInvokeCallbackAttribute]
+        static void ManagedOnPauseCallback(int pause)
+        {
+            PlatformEvents.SendSuspendResumeEvent(sWindowSystem, new SuspendResumeEvent(pause != 0));
+        }
+
+        [MonoPInvokeCallbackAttribute]
+        static void ManagedOnDestroyCallback()
+        {
+            PlatformEvents.SendQuitEvent(sWindowSystem, new QuitEvent());
+        }
+
+        private void SetCallbacks()
+        {
+            HTMLNativeCalls.setDestroyCallback(Marshal.GetFunctionPointerForDelegate((Action)ManagedOnDestroyCallback));
+            HTMLNativeCalls.setPauseCallback(Marshal.GetFunctionPointerForDelegate((Action<int>)ManagedOnPauseCallback));
+        }
+
         protected override void OnStartRunning()
         {
             base.OnStartRunning();
-            if (initialized)
-                return;
+
+            // The actual init() call is in DotsRuntime.Initialize().
+            //
+            // The test cases run without ever running any Systems,
+            // so this code in System.OnStartRunning() may never get called
+            // by the test suite.
+            //
+            // That's why the JS init() is run early (in DotsRuntime.Initialize())
+            // but additional tasks can be done here.
 #if DEBUG
             Debug.Log("HTML Window init.");
 #endif
-            try
-            {
-                initialized = HTMLNativeCalls.init();
-            }
-            catch
-            {
-                Console.WriteLine("  Excepted (Is lib_unity_tiny2d_html.dll missing?).");
-                initialized = false;
-            }
-            if (!initialized)
-            {
-                Console.WriteLine("  Failed.");
-                return;
-            }
-
+            SetCallbacks();
             UpdateDisplayInfo(firstTime: true);
         }
 
@@ -76,16 +92,12 @@ namespace Unity.Tiny.Web
 
         protected override void OnUpdate()
         {
-            if (!initialized)
-                return;
-
             UpdateDisplayInfo(firstTime: false);
         }
 
         private void UpdateDisplayInfo(bool firstTime)
         {
-            var env = World.TinyEnvironment();
-            var di = env.GetConfigData<DisplayInfo>();
+            var di = GetSingleton<DisplayInfo>();
 
             // TODO DOTSR-994 -- screenDpiScale is being used as both user configuration and information here
             if (di.screenDpiScale == 0.0f)
@@ -112,7 +124,7 @@ namespace Unity.Tiny.Web
                 di.height = (int)(di.frameHeight * di.screenDpiScale);
                 wCanvas = di.frameWidth;
                 hCanvas = di.frameHeight;
-            } 
+            }
             else if (firstTime)
             {
                 di.width = (int)(di.width * di.screenDpiScale);
@@ -131,25 +143,27 @@ namespace Unity.Tiny.Web
                     Debug.Log($"setCanvasSize {firstTime} {wCanvas}px {hCanvas}px (backing {di.framebufferWidth} {di.framebufferHeight}, dpi scale {di.screenDpiScale})");
 #endif
                     HTMLNativeCalls.setCanvasSize(wCanvas, hCanvas, di.framebufferWidth, di.framebufferHeight);
-                    env.SetConfigData(di);
+                    SetSingleton(di);
                     lastDisplayInfo = di;
                 }
             }
         }
 
         protected DisplayInfo lastDisplayInfo;
-        protected bool initialized;
     }
 
     static class HTMLNativeCalls
     {
-        // calls to HTMLWrapper.cpp
-        [DllImport("lib_unity_tiny_web", EntryPoint = "init_html")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool init();
-
         [DllImport("lib_unity_tiny_web", EntryPoint = "shutdown_html")]
         public static extern void shutdown(int exitCode);
+
+        [DllImport("lib_unity_tiny_web", EntryPoint = "destroycallbackinit_html")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool setDestroyCallback(IntPtr func);
+
+        [DllImport("lib_unity_tiny_web", EntryPoint = "pausecallbackinit_html")]
+        [return: MarshalAs(UnmanagedType.I1)]
+        public static extern bool setPauseCallback(IntPtr func);
 
         // calls to HTMLWrapper.js directly
         [DllImport("lib_unity_tiny_web", EntryPoint = "js_html_setCanvasSize")]

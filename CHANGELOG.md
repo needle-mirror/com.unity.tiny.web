@@ -4,21 +4,23 @@ All notable changes to this package will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## [0.29.0] - 2020-07-10
+## [0.31.0] - 2020-09-24
+
+### Fixed
+
+* Fixed an issue which prevented the renderer from responding to changes to the screen dimensions.
+
+## [0.30.0] - 2020-08-26
+
+### Added
+
+* Support for platform OnQuit and OnSuspendResume
+
+## [0.29.0] - 2020-08-04
 
 ### Added
 
 * Add support for managed code debugging with Wasm
-
-### Changed
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 
 ## [0.28.0] - 2020-07-10
@@ -31,20 +33,6 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 ### Changed
 
 * Updated minimum Unity Editor version to 2020.1.0b15 (40d9420e7de8)
-
-### Deprecated
-
-
-### Removed
-
-
-### Fixed
-
-
-### Security
-
-
-
 
 ## [0.27.0] - 2020-05-27
 

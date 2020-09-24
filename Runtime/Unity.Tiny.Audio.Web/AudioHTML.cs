@@ -204,8 +204,7 @@ namespace Unity.Tiny.Web
         protected override void OnUpdate()
         {
             base.OnUpdate();
-            TinyEnvironment env = World.TinyEnvironment();
-            AudioConfig ac = env.GetConfigData<AudioConfig>();
+            AudioConfig ac = GetSingleton<AudioConfig>();
             if (ac.paused != paused)
             {
                 paused = ac.paused;
@@ -226,11 +225,13 @@ namespace Unity.Tiny.Web
             //Console.WriteLine("(re) checking un-locked: ");
             //Console.WriteLine(unlocked ? "true" : "false");
 
-            TinyEnvironment env = World.TinyEnvironment();
-            AudioConfig ac = env.GetConfigData<AudioConfig>();
+            if (!HasSingleton<AudioConfig>())
+                EntityManager.CreateEntity(typeof(AudioConfig));
+
+            AudioConfig ac = GetSingleton<AudioConfig>();
             ac.initialized = true;
             ac.unlocked = unlocked;
-            env.SetConfigData(ac);
+            SetSingleton(ac);
         }
 
         protected override void DestroyAudioSystem()
@@ -258,10 +259,9 @@ namespace Unity.Tiny.Web
                             unlocked = AudioHTMLNativeCalls.IsUnlocked();
                             if (unlocked)
                             {
-                                TinyEnvironment env = World.TinyEnvironment();
-                                AudioConfig ac = env.GetConfigData<AudioConfig>();
+                                AudioConfig ac = GetSingleton<AudioConfig>();
                                 ac.unlocked = unlocked;
-                                env.SetConfigData(ac);
+                                SetSingleton(ac);
                             }
                         }
 
