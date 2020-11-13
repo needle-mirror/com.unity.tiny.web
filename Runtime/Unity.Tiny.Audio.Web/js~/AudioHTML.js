@@ -21,7 +21,12 @@ mergeInto(LibraryManager.library, {
             return isSafari;
         };
 
+        this.unlockState = 0/*locked*/;
+
         ut._HTML.unlock = function() {
+            if (self.unlockState == 0)
+                return;
+
             // call this method on touch start to create and play a buffer, then check
             // if the audio actually played to determine if audio has now been
             // unlocked on iOS, Android, etc.
@@ -98,8 +103,6 @@ mergeInto(LibraryManager.library, {
         this.uncompressedAudioBufferBytes = 0;
         this.uncompressedAudioBufferBytesMax = 50*1024*1024;
 
-        // try to unlock audio
-        this.unlockState = 0/*locked*/;
         var navigator = (typeof window !== 'undefined' && window.navigator)
             ? window.navigator
             : null;
@@ -160,7 +163,7 @@ mergeInto(LibraryManager.library, {
     js_html_audioPause__proxy: 'async',
     js_html_audioPause__sig: 'v',
     js_html_audioPause : function () {
-        if (this.audioContext && this.audioContext.suspend) {
+        if (this.audioContext && this.audioContext.suspend && (this.audioContext.state === 'running')) {
             this.audioContext.suspend();
         }
     },
@@ -169,9 +172,15 @@ mergeInto(LibraryManager.library, {
     js_html_audioResume__proxy: 'async',
     js_html_audioResume__sig: 'v',
     js_html_audioResume : function () {
-        if (this.audioContext && this.audioContext.resume) {
+        if (this.audioContext && this.audioContext.resume && (this.audioContext.state !== 'running')) {
             this.audioContext.resume();
         }
+    },
+
+    js_html_setMaxUncompressedAudioBufferBytes__proxy: 'async',
+    js_html_setMaxUncompressedAudioBufferBytes__sig: 'vi',
+    js_html_setMaxUncompressedAudioBufferBytes : function (maxUncompressedAudioBufferBytes) {
+        this.uncompressedAudioBufferBytesMax = uncompressedAudioBufferBytesMax;
     },
 
     js_html_audioUpdate__proxy: 'sync',
@@ -373,17 +382,17 @@ mergeInto(LibraryManager.library, {
     js_html_audioPlay : function (audioClipIdx, audioSourceIdx, volume, pitch, pan, loop) 
     {
         if (!this.audioContext || audioClipIdx < 0 || audioSourceIdx < 0)
-            return false;
+            return 0;
 
         if (this.audioContext.state !== 'running')
-            return false;
+            return 0;
 
         var self = this;
 
         // require compressed audio buffer to be loaded
         var audioClip = this.audioClips[audioClipIdx];
         if (!audioClip || (audioClip.loadingStatus == 4/*error*/))
-            return false;
+            return 0;
 
         if (audioClip.loadingStatus == 1/*compressed loaded*/) {
             audioClip.loadingStatus = 2/*decompressing*/;
@@ -413,7 +422,7 @@ mergeInto(LibraryManager.library, {
         }
 
         if (audioClip.loadingStatus != 3)
-            return false;
+            return 0;
 
         //console.log("Playing clip " + audioClipIdx);
 
@@ -474,7 +483,7 @@ mergeInto(LibraryManager.library, {
         sourceNode.start();
         sourceNode.isPlaying = true;
 
-        return true;
+        return 1;
     },
 
     // remove audio source node, optionally stop it 
@@ -482,12 +491,12 @@ mergeInto(LibraryManager.library, {
     js_html_audioStop__sig: 'vii',
     js_html_audioStop : function (audioSourceIdx, dostop) {
         if (!this.audioContext || audioSourceIdx < 0)
-            return false;
+            return 0;
 
         // retrieve audio source node
         var sourceNode = this.audioSources[audioSourceIdx];
         if (!sourceNode)
-            return false;
+            return 0;
 
         // stop audio source
         if (sourceNode.isPlaying && dostop) {
@@ -495,7 +504,7 @@ mergeInto(LibraryManager.library, {
             sourceNode.isPlaying = false;
         }
 
-        return true;
+        return 1;
     },
 
     js_html_audioSetVolume__proxy: 'sync',

@@ -2,6 +2,11 @@
     "name": "Unity.Tiny.Audio.Web",
     "references": [
         "Unity.Entities",
+        "Unity.Transforms",
+        "Unity.Mathematics",
+        "Unity.Collections",
+        "Unity.Collections.Lowlevel.Unsafe",
+        "Unity.Burst",
         "Unity.Tiny.Core",
         "Unity.Tiny.Web",
         "Unity.Tiny.Audio"

@@ -1,21 +1,32 @@
 using System;
-using Unity.Tiny.GenericAssetLoading;
-using Unity.Entities;
-using Unity.Tiny.Audio;
 using System.Runtime.InteropServices;
-#if ENABLE_DOTSPLAYER_PROFILER
+using Unity.Entities;
+using Unity.Transforms;
+using Unity.Mathematics;
+using Unity.Collections;
+using Unity.Collections.LowLevel.Unsafe;
+using Unity.Burst;
+using Unity.Tiny;
+using Unity.Tiny.Audio;
+using Unity.Tiny.GenericAssetLoading;
+
+#if ENABLE_DOTSRUNTIME_PROFILER
 using Unity.Development.Profiling;
 #endif
 
 namespace Unity.Tiny.Web
 {
     // Unlike the native version, the HTML version manages the IDs for the clips and sources.
-    static class IDPool
+    struct IDPool
     {
-        internal static int clipID;
-        internal static int sourceID;
+        internal int clipID;
+        internal int sourceID;
     }
 
+    sealed class SharedIDPool
+    {
+        public static readonly SharedStatic<IDPool> Value = SharedStatic<IDPool>.GetOrCreate<AudioHTMLSystemLoadFromFile, IDPool>();
+    }
 
     public struct AudioHTMLClip : ISystemStateComponentData
     {
@@ -24,11 +35,6 @@ namespace Unity.Tiny.Web
 
     public struct AudioHTMLLoading : ISystemStateComponentData
     {
-    }
-
-    struct AudioHTMLSource : IComponentData
-    {
-        public int sourceID;
     }
 
     static class AudioHTMLNativeCalls
@@ -52,6 +58,9 @@ namespace Unity.Tiny.Web
         [DllImport(DLL, EntryPoint = "js_html_audioResume")]
         public static extern void Resume();
 
+        [DllImport(DLL, EntryPoint = "js_html_setMaxUncompressedAudioBufferBytes")]
+        public static extern void SetUncompressedAudioMemoryBytesMax(int uncompressedAudioMemoryBytesMax);
+
         // Note this just returns the audioClipIndex, which isn't super helpful.
         [DllImport(DLL, EntryPoint = "js_html_audioStartLoadFile", CharSet = CharSet.Ansi)]
         public static extern int StartLoad([MarshalAs(UnmanagedType.LPStr)] string audioClipName, int audioClipIndex);
@@ -66,7 +75,7 @@ namespace Unity.Tiny.Web
         [DllImport(DLL, EntryPoint = "js_html_audioFree")]
         public static extern void Free(int audioClipIndex);
 
-#if ENABLE_DOTSPLAYER_PROFILER
+#if ENABLE_DOTSRUNTIME_PROFILER
         [DllImport(DLL, EntryPoint = "js_html_getRequiredMemoryUncompressed")]
         public static extern int GetRequiredMemoryUncompressed(int clipID);
 
@@ -75,28 +84,22 @@ namespace Unity.Tiny.Web
 #endif
 
         [DllImport(DLL, EntryPoint = "js_html_audioPlay")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool Play(int audioClipIdx, int audioSourceIdx, double volume, double pitch, double pan, bool loop);
+        public static extern int Play(int audioClipIdx, int audioSourceIdx, double volume, double pitch, double pan, int loop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioStop")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool Stop(int audioSourceIdx, bool doStop);
+        public static extern int Stop(int audioSourceIdx, int doStop);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetVolume")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetVolume(int audioSourceIdx, double volume);
+        public static extern void SetVolume(int audioSourceIdx, double volume);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetPan")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetPan(int audioSourceIdx, double pan);
+        public static extern void SetPan(int audioSourceIdx, double pan);
 
         [DllImport(DLL, EntryPoint = "js_html_audioSetPitch")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool SetPitch(int audioSourceIdx, double pitch);
+        public static extern void SetPitch(int audioSourceIdx, double pitch);
 
         [DllImport(DLL, EntryPoint = "js_html_audioIsPlaying")]
-        [return : MarshalAs(UnmanagedType.I1)]
-        public static extern bool IsPlaying(int audioSourceIdx);
+        public static extern int IsPlaying(int audioSourceIdx);
 
         [DllImport(DLL, EntryPoint = "js_html_audioUpdate")]
         public static extern void Update();
@@ -120,7 +123,7 @@ namespace Unity.Tiny.Web
             }
 
             string path = entityManager.GetBufferAsString<AudioClipLoadFromFileAudioFile>(e);
-            audioHtmlClip.clipID = ++IDPool.clipID;
+            audioHtmlClip.clipID = ++SharedIDPool.Value.Data.clipID;
             AudioHTMLNativeCalls.StartLoad(path, audioHtmlClip.clipID);
             audioClip.status = AudioClipStatus.Loading;
         }
@@ -132,22 +135,6 @@ namespace Unity.Tiny.Web
             if (result == LoadResult.success)
             {
                 audioClip.status = AudioClipStatus.Loaded;
-#if ENABLE_DOTSPLAYER_PROFILER
-                ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
-                int memUncompressed = AudioHTMLNativeCalls.GetRequiredMemoryUncompressed(audioNative.clipID);
-                int memCompressed = AudioHTMLNativeCalls.GetRequiredMemoryCompressed(audioNative.clipID);
-                long bytes = memUncompressed + memCompressed;
-                ProfilerStats.AccumStats.memAudio.Accumulate(bytes);
-                ProfilerStats.AccumStats.memReservedAudio.Accumulate(bytes);
-                ProfilerStats.AccumStats.memUsedAudio.Accumulate(bytes);
-
-                ProfilerStats.AccumStats.audioSampleMemory.Accumulate(memUncompressed);
-                ProfilerStats.AccumStats.audioStreamFileMemory.Accumulate(memCompressed);
-
-                // WebGL audio loading doesn't use our unsafeutility heap allocator so we need to track our own stats
-                ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
-                ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
-#endif
             }
             else if (result == LoadResult.failed)
             {
@@ -159,22 +146,6 @@ namespace Unity.Tiny.Web
 
         public void FreeNative(EntityManager man, Entity e, ref AudioHTMLClip audioNative)
         {
-#if ENABLE_DOTSPLAYER_PROFILER
-            ProfilerStats.AccumStats.memAudioCount.Accumulate(-1);
-            int memUncompressed = AudioHTMLNativeCalls.GetRequiredMemoryUncompressed(audioNative.clipID);
-            int memCompressed = AudioHTMLNativeCalls.GetRequiredMemoryCompressed(audioNative.clipID);
-            long bytes = -(memUncompressed + memCompressed);
-            ProfilerStats.AccumStats.memAudio.Accumulate(bytes);
-            ProfilerStats.AccumStats.memReservedAudio.Accumulate(bytes);
-            ProfilerStats.AccumStats.memUsedAudio.Accumulate(bytes);
-
-            ProfilerStats.AccumStats.audioSampleMemory.Accumulate(-memUncompressed);
-            ProfilerStats.AccumStats.audioStreamFileMemory.Accumulate(-memCompressed);
-
-            // WebGL audio loading doesn't use our unsafeutility heap allocator so we need to track our own stats
-            ProfilerStats.AccumStats.memReservedExternal.Accumulate(bytes);
-            ProfilerStats.AccumStats.memUsedExternal.Accumulate(bytes);
-#endif
             AudioHTMLNativeCalls.Free(audioNative.clipID);
         }
 
@@ -199,20 +170,141 @@ namespace Unity.Tiny.Web
     public class AudioHTMLSystem : AudioSystem
     {
         private bool unlocked = false;
-        private bool paused = false;
+
+        protected override void OnStartRunning()
+        {
+            AudioHTMLNativeCalls.Unlock();
+            unlocked = AudioHTMLNativeCalls.IsUnlocked();
+            //Console.WriteLine("(re) checking un-locked: ");
+            //Console.WriteLine(unlocked ? "true" : "false");
+
+            AudioConfig ac = GetSingleton<AudioConfig>();
+            ac.initialized = true;
+            ac.unlocked = unlocked;
+            SetSingleton<AudioConfig>(ac);
+        }
+
+        protected override void OnStopRunning()
+        {
+            
+        }
 
         protected override void OnUpdate()
         {
+            EntityManager mgr = EntityManager;
+            Entity audioEntity = m_audioEntity;
+            NativeList<Entity> entitiesPlayed = new NativeList<Entity>(Allocator.Temp);
+
             base.OnUpdate();
+
             AudioConfig ac = GetSingleton<AudioConfig>();
-            if (ac.paused != paused)
+            if (!unlocked)
             {
-                paused = ac.paused;
-                if (paused)
-                    AudioHTMLNativeCalls.Pause();
-                else
-                    AudioHTMLNativeCalls.Resume();
+                unlocked = AudioHTMLNativeCalls.IsUnlocked();    
+                ac.unlocked = unlocked;
+                SetSingleton<AudioConfig>(ac);
             }
+            
+            if (ac.paused)
+                AudioHTMLNativeCalls.Pause();
+            else
+                AudioHTMLNativeCalls.Resume();
+
+            AudioHTMLNativeCalls.SetUncompressedAudioMemoryBytesMax(ac.maxUncompressedAudioMemoryBytes);
+
+            // Stop sounds.
+            for (int i = 0; i < mgr.GetBuffer<SourceIDToStop>(audioEntity).Length; i++)
+            {
+                uint id = mgr.GetBuffer<SourceIDToStop>(audioEntity)[i];
+                AudioHTMLNativeCalls.Stop((int)id, 1);
+            }
+
+            // Play sounds.
+            if (unlocked)
+            {
+                Entities
+                    .WithAll<AudioSource, AudioSourceStart>()
+                    .ForEach((Entity e) =>
+                    {
+                        uint sourceID = (uint)PlaySource(mgr, e);
+                        if (sourceID > 0)
+                        {
+                            AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                            audioSourceID.sourceID = sourceID;
+                            mgr.SetComponentData<AudioSourceID>(e, audioSourceID);
+
+                            entitiesPlayed.Add(e);
+                        }
+                    }).Run();
+
+                for (int i = 0; i < entitiesPlayed.Length; i++)
+                    mgr.RemoveComponent<AudioSourceStart>(entitiesPlayed[i]);
+            }
+
+            DynamicBuffer<EntityPlaying> entitiesPlaying = mgr.GetBuffer<EntityPlaying>(m_audioEntity);
+            for (int i = 0; i < entitiesPlaying.Length; i++)
+            {
+                Entity e = entitiesPlaying[i];
+                AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
+
+                audioSource.isPlaying = (IsPlaying(mgr, e) == 1) ? true : false;
+                mgr.SetComponentData<AudioSource>(e, audioSource);
+
+                if (audioSource.isPlaying)
+                {
+                    float volume = audioSource.volume;
+                    if (mgr.HasComponent<AudioDistanceAttenuation>(e))
+                    {
+                        AudioDistanceAttenuation distanceAttenuation = mgr.GetComponentData<AudioDistanceAttenuation>(e);
+                        volume *= distanceAttenuation.volume;
+                    }
+                    SetVolume(mgr, e, volume);
+
+                    if (mgr.HasComponent<Audio3dPanning>(e))
+                    {
+                        Audio3dPanning panning = mgr.GetComponentData<Audio3dPanning>(e);
+                        SetPan(mgr, e, panning.pan);
+                    }
+                    else if (mgr.HasComponent<Audio2dPanning>(e))
+                    {
+                        Audio2dPanning panning = mgr.GetComponentData<Audio2dPanning>(e);
+                        SetPan(mgr, e, panning.pan);
+                    }
+
+                    if (mgr.HasComponent<AudioPitch>(e))
+                    {
+                        AudioPitch pitchEffect = mgr.GetComponentData<AudioPitch>(e);
+                        float pitch = (pitchEffect.pitch > 0.0f) ? pitchEffect.pitch : 1.0f;
+                        SetPitch(mgr, e, pitch);
+                    }
+                } 
+            }
+
+#if ENABLE_DOTSRUNTIME_PROFILER
+            ProfilerStats.AccumStats.memAudioCount.value = 0;
+            ProfilerStats.AccumStats.memAudio.value = 0;
+            ProfilerStats.AccumStats.memReservedAudio.value = 0;
+            ProfilerStats.AccumStats.memUsedAudio.value = 0;
+            ProfilerStats.AccumStats.memReservedExternal.value = 0;
+            ProfilerStats.AccumStats.memUsedExternal.value = 0;
+            ProfilerStats.AccumStats.audioStreamFileMemory.value = 0;
+            ProfilerStats.AccumStats.audioSampleMemory.value = 0;
+
+            Entities.ForEach((Entity e, in AudioHTMLClip audioHTMLClip) =>
+            {
+                int memUncompressedBytes = AudioHTMLNativeCalls.GetRequiredMemoryUncompressed(audioHTMLClip.clipID);
+                int memCompressedBytes = AudioHTMLNativeCalls.GetRequiredMemoryCompressed(audioHTMLClip.clipID);
+                long memTotalBytes = memUncompressedBytes + memCompressedBytes;
+
+                ProfilerStats.AccumStats.memAudioCount.Accumulate(1);
+                ProfilerStats.AccumStats.memAudio.Accumulate(memTotalBytes);
+                ProfilerStats.AccumStats.memReservedAudio.Accumulate(memTotalBytes);
+                ProfilerStats.AccumStats.memUsedAudio.Accumulate(memTotalBytes);
+                ProfilerStats.AccumStats.memReservedExternal.Accumulate(memTotalBytes);
+                ProfilerStats.AccumStats.memUsedExternal.Accumulate(memTotalBytes);
+                ProfilerStats.AccumStats.audioSampleMemory.Accumulate(memTotalBytes);
+            }).Run();
+#endif
 
             AudioHTMLNativeCalls.Update();
         }
@@ -221,17 +313,6 @@ namespace Unity.Tiny.Web
         {
             //Console.WriteLine("InitAudioSystem()");
             AudioHTMLNativeCalls.Init();
-            unlocked = AudioHTMLNativeCalls.IsUnlocked();
-            //Console.WriteLine("(re) checking un-locked: ");
-            //Console.WriteLine(unlocked ? "true" : "false");
-
-            if (!HasSingleton<AudioConfig>())
-                EntityManager.CreateEntity(typeof(AudioConfig));
-
-            AudioConfig ac = GetSingleton<AudioConfig>();
-            ac.initialized = true;
-            ac.unlocked = unlocked;
-            SetSingleton(ac);
         }
 
         protected override void DestroyAudioSystem()
@@ -239,10 +320,9 @@ namespace Unity.Tiny.Web
             // No-op in HTML
         }
 
-        protected override bool PlaySource(Entity e)
+        [BurstCompile]
+        protected static int PlaySource(EntityManager mgr, Entity e)
         {
-            var mgr = EntityManager;
-
             if (mgr.HasComponent<AudioSource>(e))
             {
                 AudioSource audioSource = mgr.GetComponentData<AudioSource>(e);
@@ -253,128 +333,95 @@ namespace Unity.Tiny.Web
                     AudioHTMLClip clip = mgr.GetComponentData<AudioHTMLClip>(clipEntity);
                     if (clip.clipID > 0)
                     {
-                        if (!unlocked)
+                        // If there is an existing source, it should re-start.
+                        // Do this with a Stop() and let it play below.
+                        if (mgr.HasComponent<AudioSourceID>(e))
                         {
-                            AudioHTMLNativeCalls.Unlock();
-                            unlocked = AudioHTMLNativeCalls.IsUnlocked();
-                            if (unlocked)
-                            {
-                                AudioConfig ac = GetSingleton<AudioConfig>();
-                                ac.unlocked = unlocked;
-                                SetSingleton(ac);
-                            }
+                            AudioSourceID ans = mgr.GetComponentData<AudioSourceID>(e);
+                            AudioHTMLNativeCalls.Stop((int)ans.sourceID, 1);
                         }
 
-                        if (unlocked)
-                        {
-                            // If there is an existing source, it should re-start.
-                            // Do this with a Stop() and let it play below.
-                            if (mgr.HasComponent<AudioHTMLSource>(e))
-                            {
-                                AudioHTMLSource ans = mgr.GetComponentData<AudioHTMLSource>(e);
-                                AudioHTMLNativeCalls.Stop(ans.sourceID, true);
-                            }
+                        float volume = audioSource.volume;
+                        float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
+                        float pitch = mgr.HasComponent<AudioPitch>(e) ? mgr.GetComponentData<AudioPitch>(e).pitch : 1.0f;
 
-                            float volume = audioSource.volume;
-                            float pan = mgr.HasComponent<Audio2dPanning>(e) ? mgr.GetComponentData<Audio2dPanning>(e).pan : 0.0f;
-                            float pitch = mgr.HasComponent<AudioPitch>(e) ? mgr.GetComponentData<AudioPitch>(e).pitch : 1.0f;
+                        // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener.
+                        // It is much smoother to ramp up volume from zero than the alternative.
+                        if (mgr.HasComponent<Audio3dPanning>(e))
+                            volume = 0.0f;
 
-                            // For 3d sounds, we start at volume zero because we don't know if this sound is close or far from the listener.
-                            // It is much smoother to ramp up volume from zero than the alternative.
-                            if (mgr.HasComponent<Audio3dPanning>(e))
-                                volume = 0.0f;
+                        int sourceID = ++SharedIDPool.Value.Data.sourceID;
 
-                            int sourceID = ++IDPool.sourceID;
+                        // Check the return value from Play because it fails sometimes at startup for AudioSources with PlayOnAwake set to true.
+                        // If initial attempt fails, try again next frame.
+                        if (AudioHTMLNativeCalls.Play(clip.clipID, sourceID, volume, pitch, pan, audioSource.loop ? 1 : 0) == 0)
+                            return 0;
 
-                            // Check the return value from Play because it fails sometimes at startup for AudioSources with PlayOnAwake set to true.
-                            // If initial attempt fails, try again next frame.
-                            if (!AudioHTMLNativeCalls.Play(clip.clipID, sourceID, volume, pitch, pan, audioSource.loop))
-                                return false;
-
-                            AudioHTMLSource audioNativeSource = new AudioHTMLSource()
-                            {
-                                sourceID = sourceID
-                            };
-                            // Need a native source as well.
-                            if (mgr.HasComponent<AudioHTMLSource>(e))
-                            {
-                                mgr.SetComponentData(e, audioNativeSource);
-                            }
-                            else
-                            {
-                                mgr.AddComponentData(e, audioNativeSource);
-                            }
-
-                            return true;
-                        }
+                        return sourceID;
                     }
                 }
             }
-            return false;
+
+            return 0;
         }
 
-        protected override void StopSource(Entity e)
+        [BurstCompile]
+        protected static void StopSource(EntityManager mgr, Entity e)
         {
-            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
-                if (audioNativeSource.sourceID > 0)
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
                 {
-                    AudioHTMLNativeCalls.Stop(audioNativeSource.sourceID, true);
+                    AudioHTMLNativeCalls.Stop((int)audioSourceID.sourceID, 1);
                 }
             }
         }
 
-        protected override bool IsPlaying(Entity e)
+        [BurstCompile]
+        protected static int IsPlaying(EntityManager mgr, Entity e)
         {
-            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioHTMLSource audioHtmlSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
-                if (audioHtmlSource.sourceID > 0)
-                {
-                    return AudioHTMLNativeCalls.IsPlaying(audioHtmlSource.sourceID);
-                }
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
+                    return AudioHTMLNativeCalls.IsPlaying((int)audioSourceID.sourceID);
             }
-            return false;
+
+            return 0;
         }
 
-        protected override bool SetVolume(Entity e, float volume)
+        [BurstCompile]
+        protected static void SetVolume(EntityManager mgr, Entity e, float volume)
         {
-            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
-                if (audioNativeSource.sourceID > 0)
-                {
-                    return AudioHTMLNativeCalls.SetVolume(audioNativeSource.sourceID, volume);
-                }
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
+                    AudioHTMLNativeCalls.SetVolume((int)audioSourceID.sourceID, volume);
             }
-            return false;
         }
 
-        protected override bool SetPan(Entity e, float pan)
+        [BurstCompile]
+        protected static void SetPan(EntityManager mgr, Entity e, float pan)
         {
-            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
-                if (audioNativeSource.sourceID > 0)
-                {
-                    return AudioHTMLNativeCalls.SetPan(audioNativeSource.sourceID, pan);
-                }
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
+                    AudioHTMLNativeCalls.SetPan((int)audioSourceID.sourceID, pan);
             }
-            return false;
         }
 
-        protected override bool SetPitch(Entity e, float pitch)
+        [BurstCompile]
+        protected static void SetPitch(EntityManager mgr, Entity e, float pitch)
         {
-            if (EntityManager.HasComponent<AudioHTMLSource>(e))
+            if (mgr.HasComponent<AudioSourceID>(e))
             {
-                AudioHTMLSource audioNativeSource = EntityManager.GetComponentData<AudioHTMLSource>(e);
-                if (audioNativeSource.sourceID > 0)
-                {
-                    return AudioHTMLNativeCalls.SetPitch(audioNativeSource.sourceID, pitch);
-                }
+                AudioSourceID audioSourceID = mgr.GetComponentData<AudioSourceID>(e);
+                if (audioSourceID.sourceID > 0)
+                    AudioHTMLNativeCalls.SetPitch((int)audioSourceID.sourceID, pitch);
             }
-            return false;
         }
     }
 }
